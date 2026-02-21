@@ -1,7 +1,19 @@
+"""
+Database layer — supports both local SQLite and Turso (libsql) for production.
+
+Mode selection via environment:
+  - TURSO_DATABASE_URL set → Turso embedded replica (syncs to remote)
+  - Otherwise → plain local SQLite (dev mode)
+"""
+
+import os
 import sqlite3
 from contextlib import contextmanager
 
 from backend.config import DB_PATH
+
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS founders (
@@ -90,7 +102,21 @@ CREATE INDEX IF NOT EXISTS idx_stats_founder ON stats_snapshots(founder_id, capt
 """
 
 
-def get_connection() -> sqlite3.Connection:
+def _use_turso():
+    return bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
+
+
+def get_connection():
+    if _use_turso():
+        import libsql_experimental as libsql
+        conn = libsql.connect(
+            "local.db",
+            sync_url=TURSO_DATABASE_URL,
+            auth_token=TURSO_AUTH_TOKEN,
+        )
+        conn.sync()
+        return conn
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -104,6 +130,8 @@ def get_db():
     try:
         yield conn
         conn.commit()
+        if _use_turso():
+            conn.sync()
     except Exception:
         conn.rollback()
         raise
@@ -122,10 +150,11 @@ def upsert_founder(conn, *, name, handle, **kwargs):
         "SELECT id FROM founders WHERE handle = ?", (handle,)
     ).fetchone()
     if existing:
-        fid = existing["id"]
-        sets = ", ".join(f"{k} = ?" for k in kwargs if kwargs[k] is not None)
-        vals = [v for v in kwargs.values() if v is not None]
-        if sets:
+        fid = existing["id"] if hasattr(existing, "__getitem__") and not isinstance(existing, tuple) else existing[0]
+        filtered = {k: v for k, v in kwargs.items() if v is not None}
+        if filtered:
+            sets = ", ".join(f"{k} = ?" for k in filtered)
+            vals = list(filtered.values())
             conn.execute(
                 f"UPDATE founders SET {sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 vals + [fid],
@@ -152,7 +181,6 @@ def add_source(conn, founder_id, source, source_id="", profile_url=""):
 
 
 def add_signal(conn, founder_id, source, label, url="", strong=False):
-    # Avoid duplicate signals with the same label in the last 24h
     dup = conn.execute(
         """SELECT id FROM signals
            WHERE founder_id = ? AND label = ?

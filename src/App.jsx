@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 const MOCK_FOUNDERS = [
   {
@@ -395,10 +397,33 @@ export default function App() {
   const [sortBy, setSortBy] = useState("score");
   const [search, setSearch] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [live, setLive] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
+
+  const fetchFounders = useCallback(async () => {
+    if (!API_BASE) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/founders`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.length > 0) {
+        setFounders(data);
+        setLive(true);
+        setLastSync(new Date());
+      }
+    } catch {
+      // Fall back to mock data silently
+    }
+  }, []);
 
   useEffect(() => {
     setTimeout(() => setLoaded(true), 100);
-  }, []);
+    fetchFounders();
+    if (API_BASE) {
+      const interval = setInterval(fetchFounders, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchFounders]);
 
   const filtered = founders
     .filter(f => filterSource === "all" || f.sources.includes(filterSource))
@@ -406,9 +431,18 @@ export default function App() {
     .filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.company.toLowerCase().includes(search.toLowerCase()) || f.domain.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => sortBy === "score" ? b.score - a.score : b.github_stars - a.github_stars);
 
-  const handleStatusChange = (id, newStatus) => {
+  const handleStatusChange = async (id, newStatus) => {
     setFounders(prev => prev.map(f => f.id === id ? { ...f, status: newStatus } : f));
     setSelected(prev => prev?.id === id ? { ...prev, status: newStatus } : prev);
+    if (API_BASE) {
+      try {
+        await fetch(`${API_BASE}/api/founders/${id}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus }),
+        });
+      } catch { /* optimistic update — ignore network errors */ }
+    }
   };
 
   const stats = {
@@ -454,8 +488,8 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 6px #34d399" }} />
-          <span style={{ fontSize: 10, color: "#34d399", fontFamily: "DM Mono, monospace" }}>LIVE</span>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: live ? "#34d399" : "#f59e0b", boxShadow: `0 0 6px ${live ? "#34d399" : "#f59e0b"}` }} />
+          <span style={{ fontSize: 10, color: live ? "#34d399" : "#f59e0b", fontFamily: "DM Mono, monospace" }}>{live ? "LIVE" : "DEMO"}</span>
         </div>
       </header>
 
@@ -550,11 +584,11 @@ export default function App() {
       }}>
         {["HN", "GitHub", "Product Hunt"].map((s, i) => (
           <span key={s} style={{ fontSize: 9, color: "#2d2d44", fontFamily: "DM Mono, monospace" }}>
-            <span style={{ color: Object.values(SOURCE_COLORS)[i].accent }}>{s}</span> · Last synced 2m ago
+            <span style={{ color: Object.values(SOURCE_COLORS)[i].accent }}>{s}</span> · {lastSync ? `Synced ${Math.round((Date.now() - lastSync) / 60000)}m ago` : "No sync yet"}
           </span>
         ))}
         <span style={{ marginLeft: "auto", fontSize: 9, color: "#2d2d44", fontFamily: "DM Mono, monospace" }}>
-          {filtered.length} founders · SQLite v3
+          {filtered.length} founders · {live ? "Turso" : "Demo mode"}
         </span>
       </div>
     </div>
