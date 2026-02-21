@@ -216,7 +216,9 @@ class _TursoConnection:
             if r.get("type") == "error":
                 raise RuntimeError(r["error"]["message"])
             if r.get("type") == "ok":
-                res = r["response"]["result"]
+                res = r.get("response", {}).get("result")
+                if res is None:
+                    continue  # skip "close" responses
                 columns = [c["name"] for c in res.get("cols", [])]
                 rows = [_decode_row(raw) for raw in res.get("rows", [])]
                 last_id = res.get("last_insert_rowid")
