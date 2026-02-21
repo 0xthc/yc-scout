@@ -2,164 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-const MOCK_FOUNDERS = [
-  {
-    id: 1,
-    name: "Aiko Tanaka",
-    handle: "@aiko_builds",
-    avatar: "AT",
-    location: "San Francisco, CA",
-    bio: "Ex-Google Brain. Building real-time financial data infra for emerging markets. 3 YC alumni in my network.",
-    sources: ["github", "hn"],
-    score: 94,
-    scoreBreakdown: { momentum: 92, domain: 96, team: 88, traction: 97, ycfit: 95 },
-    status: "to_contact",
-    signals: [
-      { type: "github", label: "482 commits in 90 days", date: "2d ago", strong: true },
-      { type: "hn", label: "Show HN: Live market data API — 847 points", date: "5d ago", strong: true },
-      { type: "github", label: "3 new repos: fin-stream, edge-cache, devkit", date: "1w ago", strong: false },
-    ],
-    domain: "Fintech Infra",
-    stage: "Pre-seed",
-    github_stars: 2840,
-    hn_karma: 4210,
-    followers: 12400,
-    company: "StreamLedger",
-    yc_alumni_connections: 3,
-    founded: "2024-09",
-    tags: ["infrastructure", "fintech", "api"],
-  },
-  {
-    id: 2,
-    name: "Marcus Webb",
-    handle: "@marcuswebb",
-    avatar: "MW",
-    location: "New York, NY",
-    bio: "Biomedical engineer turned founder. Automating clinical trial recruitment with AI. FDA advisor background.",
-    sources: ["hn", "producthunt"],
-    score: 89,
-    scoreBreakdown: { momentum: 85, domain: 94, team: 91, traction: 82, ycfit: 90 },
-    status: "watching",
-    signals: [
-      { type: "hn", label: "Ask HN: How do you handle HIPAA in early-stage? — 310 pts", date: "3d ago", strong: false },
-      { type: "producthunt", label: "#2 Product of the Day — TrialMatch AI", date: "1w ago", strong: true },
-      { type: "hn", label: "Show HN: AI clinical trial matching — 512 points", date: "2w ago", strong: true },
-    ],
-    domain: "Health AI",
-    stage: "Pre-seed",
-    github_stars: 340,
-    hn_karma: 2870,
-    followers: 5800,
-    company: "TrialMatch",
-    yc_alumni_connections: 1,
-    founded: "2024-11",
-    tags: ["healthtech", "ai", "biotech"],
-  },
-  {
-    id: 3,
-    name: "Priya Nair",
-    handle: "@priya_nair_dev",
-    avatar: "PN",
-    location: "London, UK",
-    bio: "Previously DeepMind. Open source compiler toolchain for ML workloads — 2.8k GitHub stars in 6 weeks.",
-    sources: ["github", "hn", "producthunt"],
-    score: 91,
-    scoreBreakdown: { momentum: 98, domain: 89, team: 90, traction: 86, ycfit: 88 },
-    status: "contacted",
-    signals: [
-      { type: "github", label: "Repo hit 2,800 stars in 6 weeks", date: "1d ago", strong: true },
-      { type: "hn", label: "Show HN: Open-source ML compiler — 1.2k points", date: "6d ago", strong: true },
-      { type: "producthunt", label: "#1 Product of the Day — MLCompile", date: "2w ago", strong: true },
-    ],
-    domain: "Dev Tools / AI Infra",
-    stage: "Bootstrapped",
-    github_stars: 2800,
-    hn_karma: 6140,
-    followers: 28000,
-    company: "MLCompile",
-    yc_alumni_connections: 5,
-    founded: "2024-08",
-    tags: ["devtools", "ml", "open-source", "compiler"],
-  },
-  {
-    id: 4,
-    name: "Jordan Cole",
-    handle: "@jordancole",
-    avatar: "JC",
-    location: "Austin, TX",
-    bio: "Serial founder (2 exits). Building B2B SaaS for construction project management. $18k MRR in month 3.",
-    sources: ["producthunt", "hn"],
-    score: 86,
-    scoreBreakdown: { momentum: 80, domain: 78, team: 97, traction: 95, ycfit: 82 },
-    status: "to_contact",
-    signals: [
-      { type: "hn", label: "Who's Hiring — ConstructIQ (seed round)", date: "4d ago", strong: false },
-      { type: "producthunt", label: "#3 Product of the Week", date: "1w ago", strong: true },
-      { type: "hn", label: "Show HN: Construction PM tool — $18k MRR", date: "3w ago", strong: true },
-    ],
-    domain: "B2B SaaS / Proptech",
-    stage: "Seed",
-    github_stars: 0,
-    hn_karma: 1540,
-    followers: 7200,
-    company: "ConstructIQ",
-    yc_alumni_connections: 2,
-    founded: "2024-07",
-    tags: ["saas", "proptech", "construction", "b2b"],
-  },
-  {
-    id: 5,
-    name: "Elif Demir",
-    handle: "@elifdemir",
-    avatar: "ED",
-    location: "Berlin, DE",
-    bio: "PhD dropout (NLP/multilingual). Building real-time translation infra for enterprise Slack/Teams.",
-    sources: ["github", "producthunt"],
-    score: 78,
-    scoreBreakdown: { momentum: 82, domain: 85, team: 72, traction: 70, ycfit: 75 },
-    status: "watching",
-    signals: [
-      { type: "github", label: "240 commits — multilang-core repo", date: "3d ago", strong: false },
-      { type: "producthunt", label: "Upcoming launch — 1,400 subscribers", date: "5d ago", strong: true },
-      { type: "github", label: "Released v0.3 — 680 GitHub stars", date: "2w ago", strong: false },
-    ],
-    domain: "NLP / Enterprise",
-    stage: "Pre-seed",
-    github_stars: 680,
-    hn_karma: 890,
-    followers: 3100,
-    company: "LinguaSync",
-    yc_alumni_connections: 0,
-    founded: "2024-10",
-    tags: ["nlp", "enterprise", "saas", "translation"],
-  },
-  {
-    id: 6,
-    name: "Tomas Rivera",
-    handle: "@tomas_build",
-    avatar: "TR",
-    location: "Mexico City, MX",
-    bio: "Ex-Stripe LATAM. Building payment infra for SMBs across LatAm — processing $200k/mo at month 6.",
-    sources: ["hn", "github"],
-    score: 83,
-    scoreBreakdown: { momentum: 78, domain: 88, team: 86, traction: 90, ycfit: 80 },
-    status: "pass",
-    signals: [
-      { type: "hn", label: "Show HN: Stripe alternative for LatAm — 390 pts", date: "2w ago", strong: true },
-      { type: "github", label: "SDK released — 420 stars", date: "3w ago", strong: false },
-    ],
-    domain: "Fintech / Payments",
-    stage: "Seed",
-    github_stars: 420,
-    hn_karma: 2100,
-    followers: 8900,
-    company: "PayFlow",
-    yc_alumni_connections: 4,
-    founded: "2024-05",
-    tags: ["fintech", "payments", "latam", "infrastructure"],
-  },
-];
-
 const SOURCE_COLORS = {
   github: { bg: "#1a1a2e", accent: "#58a6ff", label: "GH" },
   hn: { bg: "#2d1a00", accent: "#ff6600", label: "HN" },
@@ -390,38 +232,46 @@ function DetailPanel({ founder, onStatusChange }) {
 }
 
 export default function App() {
-  const [founders, setFounders] = useState(MOCK_FOUNDERS);
+  const [founders, setFounders] = useState([]);
   const [selected, setSelected] = useState(null);
   const [filterSource, setFilterSource] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortBy, setSortBy] = useState("score");
   const [search, setSearch] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [live, setLive] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
-  const fetchFounders = useCallback(async () => {
-    if (!API_BASE) return;
+  const fetchFounders = useCallback(async (isInitial = false) => {
+    if (!API_BASE) {
+      setLoading(false);
+      setError("No API URL configured. Set VITE_API_URL to connect.");
+      return;
+    }
+    if (isInitial) setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/founders?limit=50`);
-      if (!res.ok) return;
+      if (!res.ok) throw new Error(`API returned ${res.status}`);
       const data = await res.json();
       const list = data.founders || data;
-      if (list.length > 0) {
-        setFounders(list);
-        setLive(true);
-        setLastSync(new Date());
-      }
-    } catch {
-      // Fall back to mock data silently
+      setFounders(list);
+      setLive(true);
+      setLastSync(new Date());
+      setError(null);
+    } catch (err) {
+      if (isInitial) setError(`Failed to load founders: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     setTimeout(() => setLoaded(true), 100);
-    fetchFounders();
+    fetchFounders(true);
     if (API_BASE) {
-      const interval = setInterval(fetchFounders, 60000);
+      const interval = setInterval(() => fetchFounders(false), 60000);
       return () => clearInterval(interval);
     }
   }, [fetchFounders]);
@@ -450,7 +300,7 @@ export default function App() {
     total: founders.length,
     strong: founders.filter(f => f.score >= 90).length,
     toContact: founders.filter(f => f.status === "to_contact").length,
-    avgScore: Math.round(founders.reduce((s, f) => s + f.score, 0) / founders.length),
+    avgScore: founders.length ? Math.round(founders.reduce((s, f) => s + f.score, 0) / founders.length) : 0,
   };
 
   return (
@@ -489,8 +339,8 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: live ? "#34d399" : "#f59e0b", boxShadow: `0 0 6px ${live ? "#34d399" : "#f59e0b"}` }} />
-          <span style={{ fontSize: 10, color: live ? "#34d399" : "#f59e0b", fontFamily: "DM Mono, monospace" }}>{live ? "LIVE" : "DEMO"}</span>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: loading ? "#6b7280" : live ? "#34d399" : "#ef4444", boxShadow: `0 0 6px ${loading ? "#6b7280" : live ? "#34d399" : "#ef4444"}` }} />
+          <span style={{ fontSize: 10, color: loading ? "#6b7280" : live ? "#34d399" : "#ef4444", fontFamily: "DM Mono, monospace" }}>{loading ? "LOADING" : live ? "LIVE" : "OFFLINE"}</span>
         </div>
       </header>
 
@@ -565,8 +415,24 @@ export default function App() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* List panel */}
         <div style={{ width: 380, flexShrink: 0, borderRight: "1px solid #0e0e1a", overflowY: "auto" }}>
-          {filtered.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: "#2d2d44", fontSize: 12, fontFamily: "DM Mono, monospace" }}>NO FOUNDERS MATCH FILTERS</div>
+          {loading ? (
+            <div style={{ padding: 60, textAlign: "center" }}>
+              <div style={{ width: 28, height: 28, border: "3px solid #1e1e2e", borderTop: "3px solid #7c3aed", borderRadius: "50%", margin: "0 auto 16px", animation: "spin 0.8s linear infinite" }} />
+              <div style={{ color: "#4b5563", fontSize: 12, fontFamily: "DM Mono, monospace" }}>LOADING FOUNDERS...</div>
+              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            </div>
+          ) : error ? (
+            <div style={{ padding: 40, textAlign: "center" }}>
+              <div style={{ color: "#ef4444", fontSize: 12, fontFamily: "DM Mono, monospace", marginBottom: 12 }}>{error}</div>
+              <button onClick={() => fetchFounders(true)} style={{
+                padding: "8px 16px", background: "#1e1e2e", border: "1px solid #2d2d44", borderRadius: 6,
+                color: "#9ca3af", fontSize: 11, fontFamily: "DM Mono, monospace", cursor: "pointer"
+              }}>RETRY</button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: "#2d2d44", fontSize: 12, fontFamily: "DM Mono, monospace" }}>
+              {founders.length === 0 ? "NO FOUNDERS YET — RUN THE PIPELINE" : "NO FOUNDERS MATCH FILTERS"}
+            </div>
           ) : filtered.map(f => (
             <FounderCard key={f.id} founder={f} onClick={setSelected} selected={selected?.id === f.id} />
           ))}
@@ -589,7 +455,7 @@ export default function App() {
           </span>
         ))}
         <span style={{ marginLeft: "auto", fontSize: 9, color: "#2d2d44", fontFamily: "DM Mono, monospace" }}>
-          {filtered.length} founders · {live ? "Turso" : "Demo mode"}
+          {filtered.length} founders · {loading ? "Loading..." : live ? "Turso" : "Not connected"}
         </span>
       </div>
     </div>
