@@ -227,26 +227,63 @@ def _build_founders_batch(conn, rows):
 
 
 @app.get("/api/founders", response_model=PaginatedFounders)
-def list_founders(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
-    """List founders sorted by composite score, paginated. Cached for 30s."""
-    cache_key = f"founders:{limit}:{offset}"
+def list_founders(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    search: str = Query("", description="Search name, company, domain"),
+    source: str = Query("", description="Filter by source: github, hn, producthunt"),
+    status: str = Query("", description="Filter by status: to_contact, watching, contacted, pass"),
+    sort: str = Query("score", description="Sort by: score, stars"),
+):
+    """List founders with server-side filtering, search, sort, and pagination."""
+    cache_key = f"founders:{limit}:{offset}:{search}:{source}:{status}:{sort}"
     cached = _cache_get(cache_key)
     if cached:
         return cached
 
     with get_db() as conn:
-        total = conn.execute("SELECT COUNT(*) as c FROM founders").fetchone()["c"]
+        where_clauses = []
+        params = []
+
+        if search:
+            where_clauses.append(
+                "(LOWER(f.name) LIKE ? OR LOWER(f.company) LIKE ? OR LOWER(f.domain) LIKE ?)"
+            )
+            term = f"%{search.lower()}%"
+            params.extend([term, term, term])
+
+        if source:
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM founder_sources fs WHERE fs.founder_id = f.id AND fs.source = ?)"
+            )
+            params.append(source)
+
+        if status:
+            where_clauses.append("f.status = ?")
+            params.append(status)
+
+        where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        if sort == "stars":
+            order_sql = """ORDER BY (
+                SELECT ss.github_stars FROM stats_snapshots ss
+                WHERE ss.founder_id = f.id ORDER BY ss.captured_at DESC LIMIT 1
+            ) DESC NULLS LAST"""
+        else:
+            order_sql = """ORDER BY (
+                SELECT composite FROM scores
+                WHERE founder_id = f.id ORDER BY scored_at DESC LIMIT 1
+            ) DESC NULLS LAST"""
+
+        total = conn.execute(
+            f"SELECT COUNT(*) as c FROM founders f{where_sql}", params
+        ).fetchone()["c"]
+
         rows = conn.execute(
-            """SELECT f.*
-               FROM founders f
-               ORDER BY (
-                   SELECT composite FROM scores
-                   WHERE founder_id = f.id
-                   ORDER BY scored_at DESC LIMIT 1
-               ) DESC NULLS LAST
-               LIMIT ? OFFSET ?""",
-            (limit, offset),
+            f"SELECT f.* FROM founders f{where_sql} {order_sql} LIMIT ? OFFSET ?",
+            params + [limit, offset],
         ).fetchall()
+
         result = {
             "founders": _build_founders_batch(conn, rows),
             "total": total,
