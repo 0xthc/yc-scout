@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: scout-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: PH_API_TOKEN
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: ALERT_EMAIL_TO
+        sync: false
+    healthCheckPath: /api/stats
