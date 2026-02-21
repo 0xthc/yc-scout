@@ -199,6 +199,30 @@ class _TursoConnection:
         last_id = res.get("last_insert_rowid")
         return _TursoCursor(columns, rows, last_id)
 
+    def execute_batch(self, queries):
+        """Execute multiple queries in a single HTTP pipeline call.
+
+        queries: list of (sql, params) tuples
+        Returns: list of _TursoCursor
+        """
+        requests = []
+        for sql, params in queries:
+            args = [_encode_arg(p) for p in params] if params else []
+            requests.append({"type": "execute", "stmt": {"sql": sql, "args": args}})
+        requests.append({"type": "close"})
+        results = self._pipeline(requests)
+        cursors = []
+        for r in results:
+            if r.get("type") == "error":
+                raise RuntimeError(r["error"]["message"])
+            if r.get("type") == "ok":
+                res = r["response"]["result"]
+                columns = [c["name"] for c in res.get("cols", [])]
+                rows = [_decode_row(raw) for raw in res.get("rows", [])]
+                last_id = res.get("last_insert_rowid")
+                cursors.append(_TursoCursor(columns, rows, last_id))
+        return cursors
+
     def executescript(self, sql):
         stmts = [s.strip() for s in sql.split(";") if s.strip()]
         requests = [{"type": "execute", "stmt": {"sql": s}} for s in stmts]

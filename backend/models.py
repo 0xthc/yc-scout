@@ -24,6 +24,13 @@ class FounderOut(BaseModel):
     followers: int
 
 
+class PaginatedFounders(BaseModel):
+    founders: list[FounderOut]
+    total: int
+    limit: int
+    offset: int
+
+
 class StatusUpdate(BaseModel):
     status: str
 

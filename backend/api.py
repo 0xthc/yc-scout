@@ -4,13 +4,14 @@ Also exposes endpoints to trigger pipeline runs and update founder status.
 """
 
 import logging
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.db import get_db, init_db
-from backend.models import FounderOut, PipelineResult, StatusUpdate
+from backend.db import get_db, init_db, _TursoConnection
+from backend.models import FounderOut, PaginatedFounders, PipelineResult, StatusUpdate
 from backend.pipeline import run_pipeline
 
 logger = logging.getLogger(__name__)
@@ -110,10 +111,110 @@ def _build_founder(conn, row) -> dict:
     }
 
 
-@app.get("/api/founders", response_model=list[FounderOut])
-def list_founders():
-    """List all founders sorted by composite score."""
+def _execute_batch(conn, queries):
+    """Execute multiple queries — batched for Turso, sequential for SQLite."""
+    if isinstance(conn, _TursoConnection):
+        return conn.execute_batch(queries)
+    return [conn.execute(sql, params or []) for sql, params in queries]
+
+
+def _build_founders_batch(conn, rows):
+    """Build founder dicts using batch queries (2 HTTP calls instead of 4N+1)."""
+    if not rows:
+        return []
+
+    fids = [r["id"] for r in rows]
+    ph = ",".join("?" for _ in fids)
+
+    cursors = _execute_batch(conn, [
+        (f"SELECT founder_id, source FROM founder_sources WHERE founder_id IN ({ph})", fids),
+        (f"SELECT founder_id, tag FROM founder_tags WHERE founder_id IN ({ph})", fids),
+        (f"""SELECT s.* FROM scores s
+             INNER JOIN (
+                 SELECT founder_id, MAX(scored_at) as max_at
+                 FROM scores WHERE founder_id IN ({ph})
+                 GROUP BY founder_id
+             ) latest ON s.founder_id = latest.founder_id AND s.scored_at = latest.max_at""", fids),
+        (f"""SELECT ss.* FROM stats_snapshots ss
+             INNER JOIN (
+                 SELECT founder_id, MAX(captured_at) as max_at
+                 FROM stats_snapshots WHERE founder_id IN ({ph})
+                 GROUP BY founder_id
+             ) latest ON ss.founder_id = latest.founder_id AND ss.captured_at = latest.max_at""", fids),
+        (f"""SELECT founder_id, source, label, url, strong, detected_at
+             FROM signals WHERE founder_id IN ({ph})
+             ORDER BY detected_at DESC""", fids),
+    ])
+
+    sources_map = defaultdict(list)
+    for r in cursors[0].fetchall():
+        sources_map[r["founder_id"]].append(r["source"])
+
+    tags_map = defaultdict(list)
+    for r in cursors[1].fetchall():
+        tags_map[r["founder_id"]].append(r["tag"])
+
+    scores_map = {}
+    for r in cursors[2].fetchall():
+        scores_map[r["founder_id"]] = r
+
+    stats_map = {}
+    for r in cursors[3].fetchall():
+        stats_map[r["founder_id"]] = r
+
+    signals_map = defaultdict(list)
+    for r in cursors[4].fetchall():
+        fid = r["founder_id"]
+        if len(signals_map[fid]) < 20:
+            signals_map[fid].append({
+                "type": r["source"],
+                "label": r["label"],
+                "url": r["url"],
+                "strong": bool(r["strong"]),
+                "date": r["detected_at"],
+            })
+
+    founders = []
+    for row in rows:
+        fid = row["id"]
+        score_row = scores_map.get(fid)
+        stats_row = stats_map.get(fid)
+        founders.append({
+            "id": fid,
+            "name": row["name"],
+            "handle": row["handle"],
+            "avatar": row["avatar"] or "".join(w[0].upper() for w in row["name"].split()[:2]),
+            "location": row["location"] or "",
+            "bio": row["bio"] or "",
+            "domain": row["domain"] or "",
+            "stage": row["stage"] or "Unknown",
+            "company": row["company"] or "",
+            "founded": row["founded"] or "",
+            "status": row["status"] or "to_contact",
+            "yc_alumni_connections": row["yc_alumni_connections"] or 0,
+            "sources": sources_map.get(fid, []),
+            "tags": tags_map.get(fid, []),
+            "score": round(score_row["composite"]) if score_row else 0,
+            "scoreBreakdown": {
+                "momentum": round(score_row["momentum"]) if score_row else 0,
+                "domain": round(score_row["domain_score"]) if score_row else 0,
+                "team": round(score_row["team"]) if score_row else 0,
+                "traction": round(score_row["traction"]) if score_row else 0,
+                "ycfit": round(score_row["ycfit"]) if score_row else 0,
+            },
+            "signals": signals_map.get(fid, []),
+            "github_stars": stats_row["github_stars"] if stats_row else 0,
+            "hn_karma": stats_row["hn_karma"] if stats_row else 0,
+            "followers": stats_row["followers"] if stats_row else 0,
+        })
+    return founders
+
+
+@app.get("/api/founders", response_model=PaginatedFounders)
+def list_founders(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+    """List founders sorted by composite score, paginated."""
     with get_db() as conn:
+        total = conn.execute("SELECT COUNT(*) as c FROM founders").fetchone()["c"]
         rows = conn.execute(
             """SELECT f.*
                FROM founders f
@@ -121,9 +222,16 @@ def list_founders():
                    SELECT composite FROM scores
                    WHERE founder_id = f.id
                    ORDER BY scored_at DESC LIMIT 1
-               ) DESC NULLS LAST"""
+               ) DESC NULLS LAST
+               LIMIT ? OFFSET ?""",
+            (limit, offset),
         ).fetchall()
-        return [_build_founder(conn, r) for r in rows]
+        return {
+            "founders": _build_founders_batch(conn, rows),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
 
 @app.get("/api/founders/{founder_id}", response_model=FounderOut)

@@ -403,11 +403,12 @@ export default function App() {
   const fetchFounders = useCallback(async () => {
     if (!API_BASE) return;
     try {
-      const res = await fetch(`${API_BASE}/api/founders`);
+      const res = await fetch(`${API_BASE}/api/founders?limit=50`);
       if (!res.ok) return;
       const data = await res.json();
-      if (data.length > 0) {
-        setFounders(data);
+      const list = data.founders || data;
+      if (list.length > 0) {
+        setFounders(list);
         setLive(true);
         setLastSync(new Date());
       }
