@@ -4,6 +4,7 @@ Also exposes endpoints to trigger pipeline runs and update founder status.
 """
 
 import logging
+import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
@@ -15,6 +16,21 @@ from backend.models import FounderOut, PaginatedFounders, PipelineResult, Status
 from backend.pipeline import run_pipeline
 
 logger = logging.getLogger(__name__)
+
+# Simple in-memory cache to avoid hammering Turso on health checks + polling
+_cache = {}
+CACHE_TTL = 30  # seconds
+
+
+def _cache_get(key):
+    entry = _cache.get(key)
+    if entry and time.time() - entry["ts"] < CACHE_TTL:
+        return entry["data"]
+    return None
+
+
+def _cache_set(key, data):
+    _cache[key] = {"data": data, "ts": time.time()}
 
 
 @asynccontextmanager
@@ -212,7 +228,12 @@ def _build_founders_batch(conn, rows):
 
 @app.get("/api/founders", response_model=PaginatedFounders)
 def list_founders(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
-    """List founders sorted by composite score, paginated."""
+    """List founders sorted by composite score, paginated. Cached for 30s."""
+    cache_key = f"founders:{limit}:{offset}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
     with get_db() as conn:
         total = conn.execute("SELECT COUNT(*) as c FROM founders").fetchone()["c"]
         rows = conn.execute(
@@ -226,12 +247,15 @@ def list_founders(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, g
                LIMIT ? OFFSET ?""",
             (limit, offset),
         ).fetchall()
-        return {
+        result = {
             "founders": _build_founders_batch(conn, rows),
             "total": total,
             "limit": limit,
             "offset": offset,
         }
+
+    _cache_set(cache_key, result)
+    return result
 
 
 @app.get("/api/founders/{founder_id}", response_model=FounderOut)
@@ -258,6 +282,7 @@ def update_status(founder_id: int, body: StatusUpdate):
             "UPDATE founders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (body.status, founder_id),
         )
+    _cache.clear()
     return {"ok": True, "status": body.status}
 
 
@@ -265,34 +290,42 @@ def update_status(founder_id: int, body: StatusUpdate):
 def trigger_pipeline():
     """Manually trigger a full pipeline run: scrape → score → alert."""
     result = run_pipeline()
+    _cache.clear()
     return result
 
 
 @app.get("/api/stats")
 def dashboard_stats():
-    """Aggregate stats for the dashboard header."""
+    """Aggregate stats for the dashboard header. Cached for 30s to reduce Turso calls."""
+    cached = _cache_get("stats")
+    if cached:
+        return cached
+
     with get_db() as conn:
-        total = conn.execute("SELECT COUNT(*) as c FROM founders").fetchone()["c"]
-        strong = conn.execute(
-            """SELECT COUNT(*) as c FROM founders f
-               WHERE (SELECT composite FROM scores WHERE founder_id = f.id
-                      ORDER BY scored_at DESC LIMIT 1) >= 90"""
-        ).fetchone()["c"]
-        to_contact = conn.execute(
-            "SELECT COUNT(*) as c FROM founders WHERE status = 'to_contact'"
-        ).fetchone()["c"]
-        avg_row = conn.execute(
-            """SELECT AVG(s.composite) as avg_score
-               FROM (SELECT founder_id, composite,
-                     ROW_NUMBER() OVER (PARTITION BY founder_id ORDER BY scored_at DESC) as rn
-                     FROM scores) s
-               WHERE s.rn = 1"""
-        ).fetchone()
+        queries = [
+            ("SELECT COUNT(*) as c FROM founders", []),
+            ("""SELECT COUNT(*) as c FROM founders f
+                WHERE (SELECT composite FROM scores WHERE founder_id = f.id
+                       ORDER BY scored_at DESC LIMIT 1) >= 90""", []),
+            ("SELECT COUNT(*) as c FROM founders WHERE status = 'to_contact'", []),
+            ("""SELECT AVG(s.composite) as avg_score
+                FROM (SELECT founder_id, composite,
+                      ROW_NUMBER() OVER (PARTITION BY founder_id ORDER BY scored_at DESC) as rn
+                      FROM scores) s
+                WHERE s.rn = 1""", []),
+        ]
+        cursors = _execute_batch(conn, queries)
+        total = cursors[0].fetchone()["c"]
+        strong = cursors[1].fetchone()["c"]
+        to_contact = cursors[2].fetchone()["c"]
+        avg_row = cursors[3].fetchone()
         avg_score = round(avg_row["avg_score"]) if avg_row["avg_score"] else 0
 
-    return {
+    result = {
         "total": total,
         "strong": strong,
         "toContact": to_contact,
         "avgScore": avg_score,
     }
+    _cache_set("stats", result)
+    return result
