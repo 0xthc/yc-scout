@@ -1,0 +1,131 @@
+"""
+Seed the database with demo founders so the API returns data immediately.
+Run: python -m backend.seed
+"""
+
+from backend.db import get_db, init_db, upsert_founder, add_source, add_signal, add_tags, save_stats, save_score
+
+DEMO_FOUNDERS = [
+    {
+        "name": "Aiko Tanaka", "handle": "@aiko_builds", "location": "San Francisco, CA",
+        "bio": "Ex-Google Brain. Building real-time financial data infra for emerging markets. 3 YC alumni in my network.",
+        "domain": "Fintech Infra", "stage": "Pre-seed", "company": "StreamLedger",
+        "founded": "2024-09", "status": "to_contact", "yc_alumni_connections": 3,
+        "sources": ["github", "hn"],
+        "tags": ["infrastructure", "fintech", "api"],
+        "signals": [
+            {"source": "github", "label": "482 commits in 90 days", "strong": True},
+            {"source": "hn", "label": "Show HN: Live market data API — 847 points", "strong": True},
+            {"source": "github", "label": "3 new repos: fin-stream, edge-cache, devkit", "strong": False},
+        ],
+        "stats": {"github_stars": 2840, "hn_karma": 4210, "followers": 12400},
+        "scores": {"momentum": 92, "domain_score": 96, "team": 88, "traction": 97, "ycfit": 95, "composite": 94},
+    },
+    {
+        "name": "Marcus Webb", "handle": "@marcuswebb", "location": "New York, NY",
+        "bio": "Biomedical engineer turned founder. Automating clinical trial recruitment with AI. FDA advisor background.",
+        "domain": "Health AI", "stage": "Pre-seed", "company": "TrialMatch",
+        "founded": "2024-11", "status": "watching", "yc_alumni_connections": 1,
+        "sources": ["hn", "producthunt"],
+        "tags": ["healthtech", "ai", "biotech"],
+        "signals": [
+            {"source": "hn", "label": "Ask HN: How do you handle HIPAA in early-stage? — 310 pts", "strong": False},
+            {"source": "producthunt", "label": "#2 Product of the Day — TrialMatch AI", "strong": True},
+            {"source": "hn", "label": "Show HN: AI clinical trial matching — 512 points", "strong": True},
+        ],
+        "stats": {"github_stars": 340, "hn_karma": 2870, "followers": 5800},
+        "scores": {"momentum": 85, "domain_score": 94, "team": 91, "traction": 82, "ycfit": 90, "composite": 89},
+    },
+    {
+        "name": "Priya Nair", "handle": "@priya_nair_dev", "location": "London, UK",
+        "bio": "Previously DeepMind. Open source compiler toolchain for ML workloads — 2.8k GitHub stars in 6 weeks.",
+        "domain": "Dev Tools / AI Infra", "stage": "Bootstrapped", "company": "MLCompile",
+        "founded": "2024-08", "status": "contacted", "yc_alumni_connections": 5,
+        "sources": ["github", "hn", "producthunt"],
+        "tags": ["devtools", "ml", "open-source", "compiler"],
+        "signals": [
+            {"source": "github", "label": "Repo hit 2,800 stars in 6 weeks", "strong": True},
+            {"source": "hn", "label": "Show HN: Open-source ML compiler — 1.2k points", "strong": True},
+            {"source": "producthunt", "label": "#1 Product of the Day — MLCompile", "strong": True},
+        ],
+        "stats": {"github_stars": 2800, "hn_karma": 6140, "followers": 28000},
+        "scores": {"momentum": 98, "domain_score": 89, "team": 90, "traction": 86, "ycfit": 88, "composite": 91},
+    },
+    {
+        "name": "Jordan Cole", "handle": "@jordancole", "location": "Austin, TX",
+        "bio": "Serial founder (2 exits). Building B2B SaaS for construction project management. $18k MRR in month 3.",
+        "domain": "B2B SaaS / Proptech", "stage": "Seed", "company": "ConstructIQ",
+        "founded": "2024-07", "status": "to_contact", "yc_alumni_connections": 2,
+        "sources": ["producthunt", "hn"],
+        "tags": ["saas", "proptech", "construction", "b2b"],
+        "signals": [
+            {"source": "hn", "label": "Who's Hiring — ConstructIQ (seed round)", "strong": False},
+            {"source": "producthunt", "label": "#3 Product of the Week", "strong": True},
+            {"source": "hn", "label": "Show HN: Construction PM tool — $18k MRR", "strong": True},
+        ],
+        "stats": {"github_stars": 0, "hn_karma": 1540, "followers": 7200},
+        "scores": {"momentum": 80, "domain_score": 78, "team": 97, "traction": 95, "ycfit": 82, "composite": 86},
+    },
+    {
+        "name": "Elif Demir", "handle": "@elifdemir", "location": "Berlin, DE",
+        "bio": "PhD dropout (NLP/multilingual). Building real-time translation infra for enterprise Slack/Teams.",
+        "domain": "NLP / Enterprise", "stage": "Pre-seed", "company": "LinguaSync",
+        "founded": "2024-10", "status": "watching", "yc_alumni_connections": 0,
+        "sources": ["github", "producthunt"],
+        "tags": ["nlp", "enterprise", "saas", "translation"],
+        "signals": [
+            {"source": "github", "label": "240 commits — multilang-core repo", "strong": False},
+            {"source": "producthunt", "label": "Upcoming launch — 1,400 subscribers", "strong": True},
+            {"source": "github", "label": "Released v0.3 — 680 GitHub stars", "strong": False},
+        ],
+        "stats": {"github_stars": 680, "hn_karma": 890, "followers": 3100},
+        "scores": {"momentum": 82, "domain_score": 85, "team": 72, "traction": 70, "ycfit": 75, "composite": 78},
+    },
+    {
+        "name": "Tomas Rivera", "handle": "@tomas_build", "location": "Mexico City, MX",
+        "bio": "Ex-Stripe LATAM. Building payment infra for SMBs across LatAm — processing $200k/mo at month 6.",
+        "domain": "Fintech / Payments", "stage": "Seed", "company": "PayFlow",
+        "founded": "2024-05", "status": "pass", "yc_alumni_connections": 4,
+        "sources": ["hn", "github"],
+        "tags": ["fintech", "payments", "latam", "infrastructure"],
+        "signals": [
+            {"source": "hn", "label": "Show HN: Stripe alternative for LatAm — 390 pts", "strong": True},
+            {"source": "github", "label": "SDK released — 420 stars", "strong": False},
+        ],
+        "stats": {"github_stars": 420, "hn_karma": 2100, "followers": 8900},
+        "scores": {"momentum": 78, "domain_score": 88, "team": 86, "traction": 90, "ycfit": 80, "composite": 83},
+    },
+]
+
+
+def seed():
+    init_db()
+    with get_db() as conn:
+        existing = conn.execute("SELECT COUNT(*) as c FROM founders").fetchone()
+        count = existing["c"] if hasattr(existing, "__getitem__") and not isinstance(existing, tuple) else existing[0]
+        if count > 0:
+            print(f"DB already has {count} founders — skipping seed.")
+            return
+
+        for f in DEMO_FOUNDERS:
+            fid = upsert_founder(
+                conn,
+                name=f["name"], handle=f["handle"], location=f["location"],
+                bio=f["bio"], domain=f["domain"], stage=f["stage"],
+                company=f["company"], founded=f["founded"], status=f["status"],
+                yc_alumni_connections=f["yc_alumni_connections"],
+            )
+            for src in f["sources"]:
+                add_source(conn, fid, src)
+            add_tags(conn, fid, f["tags"])
+            for sig in f["signals"]:
+                add_signal(conn, fid, sig["source"], sig["label"], strong=sig["strong"])
+            save_stats(conn, fid, **f["stats"])
+            save_score(conn, fid, **f["scores"])
+            print(f"  Seeded: {f['name']} ({f['company']}) — score {f['scores']['composite']}")
+
+    print(f"\nDone — {len(DEMO_FOUNDERS)} founders seeded.")
+
+
+if __name__ == "__main__":
+    seed()
