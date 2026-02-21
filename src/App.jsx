@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -231,19 +231,41 @@ function DetailPanel({ founder, onStatusChange }) {
   );
 }
 
+const PAGE_SIZE = 50;
+
 export default function App() {
   const [founders, setFounders] = useState([]);
+  const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState(null);
   const [filterSource, setFilterSource] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortBy, setSortBy] = useState("score");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [live, setLive] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+  const listRef = useRef(null);
 
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const buildUrl = useCallback((offset = 0) => {
+    const params = new URLSearchParams({ limit: PAGE_SIZE, offset });
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (filterSource !== "all") params.set("source", filterSource);
+    if (filterStatus !== "all") params.set("status", filterStatus);
+    if (sortBy === "stars") params.set("sort", "stars");
+    return `${API_BASE}/api/founders?${params}`;
+  }, [debouncedSearch, filterSource, filterStatus, sortBy]);
+
+  // Fetch first page (on filter/search/sort change)
   const fetchFounders = useCallback(async (isInitial = false) => {
     if (!API_BASE) {
       setLoading(false);
@@ -252,11 +274,11 @@ export default function App() {
     }
     if (isInitial) setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/founders?limit=50`);
+      const res = await fetch(buildUrl(0));
       if (!res.ok) throw new Error(`API returned ${res.status}`);
       const data = await res.json();
-      const list = data.founders || data;
-      setFounders(list);
+      setFounders(data.founders || []);
+      setTotal(data.total || 0);
       setLive(true);
       setLastSync(new Date());
       setError(null);
@@ -265,22 +287,59 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [buildUrl]);
 
+  // Load next page (infinite scroll)
+  const loadMore = useCallback(async () => {
+    if (loadingMore || founders.length >= total) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(buildUrl(founders.length));
+      if (!res.ok) return;
+      const data = await res.json();
+      const next = data.founders || [];
+      if (next.length > 0) {
+        setFounders(prev => [...prev, ...next]);
+      }
+    } catch { /* ignore */ } finally {
+      setLoadingMore(false);
+    }
+  }, [buildUrl, founders.length, total, loadingMore]);
+
+  // Initial load
   useEffect(() => {
     setTimeout(() => setLoaded(true), 100);
     fetchFounders(true);
-    if (API_BASE) {
-      const interval = setInterval(() => fetchFounders(false), 60000);
-      return () => clearInterval(interval);
-    }
+  }, []);
+
+  // Re-fetch when filters/search/sort change (reset to page 1)
+  useEffect(() => {
+    if (!loaded) return;
+    if (listRef.current) listRef.current.scrollTop = 0;
+    fetchFounders(false);
+  }, [debouncedSearch, filterSource, filterStatus, sortBy]);
+
+  // Background refresh every 60s
+  useEffect(() => {
+    if (!API_BASE) return;
+    const interval = setInterval(() => fetchFounders(false), 60000);
+    return () => clearInterval(interval);
   }, [fetchFounders]);
 
-  const filtered = founders
-    .filter(f => filterSource === "all" || f.sources.includes(filterSource))
-    .filter(f => filterStatus === "all" || f.status === filterStatus)
-    .filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.company.toLowerCase().includes(search.toLowerCase()) || f.domain.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => sortBy === "score" ? b.score - a.score : b.github_stars - a.github_stars);
+  // Infinite scroll: load more when near bottom of list panel
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+        loadMore();
+      }
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [loadMore]);
+
+  const hasMore = founders.length < total;
 
   const handleStatusChange = async (id, newStatus) => {
     setFounders(prev => prev.map(f => f.id === id ? { ...f, status: newStatus } : f));
@@ -297,7 +356,7 @@ export default function App() {
   };
 
   const stats = {
-    total: founders.length,
+    total: total || founders.length,
     strong: founders.filter(f => f.score >= 90).length,
     toContact: founders.filter(f => f.status === "to_contact").length,
     avgScore: founders.length ? Math.round(founders.reduce((s, f) => s + f.score, 0) / founders.length) : 0,
@@ -414,7 +473,7 @@ export default function App() {
       {/* Body */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* List panel */}
-        <div style={{ width: 380, flexShrink: 0, borderRight: "1px solid #0e0e1a", overflowY: "auto" }}>
+        <div ref={listRef} style={{ width: 380, flexShrink: 0, borderRight: "1px solid #0e0e1a", overflowY: "auto" }}>
           {loading ? (
             <div style={{ padding: 60, textAlign: "center" }}>
               <div style={{ width: 28, height: 28, border: "3px solid #1e1e2e", borderTop: "3px solid #7c3aed", borderRadius: "50%", margin: "0 auto 16px", animation: "spin 0.8s linear infinite" }} />
@@ -429,13 +488,29 @@ export default function App() {
                 color: "#9ca3af", fontSize: 11, fontFamily: "DM Mono, monospace", cursor: "pointer"
               }}>RETRY</button>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : founders.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: "#2d2d44", fontSize: 12, fontFamily: "DM Mono, monospace" }}>
-              {founders.length === 0 ? "NO FOUNDERS YET — RUN THE PIPELINE" : "NO FOUNDERS MATCH FILTERS"}
+              {(debouncedSearch || filterSource !== "all" || filterStatus !== "all") ? "NO FOUNDERS MATCH FILTERS" : "NO FOUNDERS YET — RUN THE PIPELINE"}
             </div>
-          ) : filtered.map(f => (
-            <FounderCard key={f.id} founder={f} onClick={setSelected} selected={selected?.id === f.id} />
-          ))}
+          ) : (
+            <>
+              {founders.map(f => (
+                <FounderCard key={f.id} founder={f} onClick={setSelected} selected={selected?.id === f.id} />
+              ))}
+              {loadingMore && (
+                <div style={{ padding: 16, textAlign: "center" }}>
+                  <div style={{ width: 20, height: 20, border: "2px solid #1e1e2e", borderTop: "2px solid #7c3aed", borderRadius: "50%", margin: "0 auto", animation: "spin 0.8s linear infinite" }} />
+                </div>
+              )}
+              {hasMore && !loadingMore && (
+                <div style={{ padding: 12, textAlign: "center" }}>
+                  <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace" }}>
+                    {founders.length} of {total} founders
+                  </span>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Detail panel */}
@@ -455,7 +530,7 @@ export default function App() {
           </span>
         ))}
         <span style={{ marginLeft: "auto", fontSize: 9, color: "#2d2d44", fontFamily: "DM Mono, monospace" }}>
-          {filtered.length} founders · {loading ? "Loading..." : live ? "Turso" : "Not connected"}
+          {founders.length}{total > founders.length ? ` of ${total}` : ""} founders · {loading ? "Loading..." : live ? "Turso" : "Not connected"}
         </span>
       </div>
     </div>
