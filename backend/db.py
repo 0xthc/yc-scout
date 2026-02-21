@@ -1,14 +1,16 @@
 """
-Database layer — supports both local SQLite and Turso (libsql) for production.
+Database layer — supports both local SQLite and Turso (HTTP API) for production.
 
 Mode selection via environment:
-  - TURSO_DATABASE_URL set → Turso embedded replica (syncs to remote)
+  - TURSO_DATABASE_URL + TURSO_AUTH_TOKEN set → Turso over HTTP (via httpx)
   - Otherwise → plain local SQLite (dev mode)
 """
 
 import os
 import sqlite3
 from contextlib import contextmanager
+
+import httpx
 
 from backend.config import DB_PATH
 
@@ -102,20 +104,133 @@ CREATE INDEX IF NOT EXISTS idx_stats_founder ON stats_snapshots(founder_id, capt
 """
 
 
+# ── Turso HTTP wrapper ──────────────────────────────────────
+
+
+class _TursoRow:
+    """Dict-like row supporting both row['col'] and row[0] access."""
+
+    def __init__(self, columns, values):
+        self._cols = columns
+        self._vals = values
+        self._map = dict(zip(columns, values))
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self._map[key]
+        return self._vals[key]
+
+    def keys(self):
+        return self._cols
+
+
+class _TursoCursor:
+    def __init__(self, columns, rows, last_insert_rowid=None):
+        self._rows = [_TursoRow(columns, r) for r in rows]
+        self.lastrowid = last_insert_rowid
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return self._rows
+
+
+def _encode_arg(val):
+    """Encode a Python value to a Turso HTTP API argument."""
+    if val is None:
+        return {"type": "null"}
+    if isinstance(val, bool):
+        return {"type": "integer", "value": str(int(val))}
+    if isinstance(val, int):
+        return {"type": "integer", "value": str(val)}
+    if isinstance(val, float):
+        return {"type": "float", "value": val}
+    return {"type": "text", "value": str(val)}
+
+
+def _decode_row(raw_row):
+    """Decode a row from Turso HTTP API response."""
+    vals = []
+    for cell in raw_row:
+        t = cell.get("type", "null")
+        if t == "null":
+            vals.append(None)
+        elif t == "integer":
+            vals.append(int(cell["value"]))
+        elif t == "float":
+            vals.append(float(cell["value"]))
+        else:
+            vals.append(cell.get("value"))
+    return vals
+
+
+class _TursoConnection:
+    """sqlite3-compatible connection that talks to Turso over HTTP."""
+
+    def __init__(self, url, token):
+        # Convert libsql:// to https://
+        http_url = url.replace("libsql://", "https://").rstrip("/")
+        self._url = f"{http_url}/v3/pipeline"
+        self._headers = {"Authorization": f"Bearer {token}"}
+        self._client = httpx.Client(timeout=30)
+
+    def _pipeline(self, requests):
+        resp = self._client.post(
+            self._url,
+            json={"requests": requests},
+            headers=self._headers,
+        )
+        resp.raise_for_status()
+        return resp.json()["results"]
+
+    def execute(self, sql, params=None):
+        args = [_encode_arg(p) for p in params] if params else []
+        results = self._pipeline([
+            {"type": "execute", "stmt": {"sql": sql, "args": args}},
+            {"type": "close"},
+        ])
+        r = results[0]
+        if r["type"] == "error":
+            raise RuntimeError(r["error"]["message"])
+        res = r["response"]["result"]
+        columns = [c["name"] for c in res.get("cols", [])]
+        rows = [_decode_row(raw) for raw in res.get("rows", [])]
+        last_id = res.get("last_insert_rowid")
+        return _TursoCursor(columns, rows, last_id)
+
+    def executescript(self, sql):
+        stmts = [s.strip() for s in sql.split(";") if s.strip()]
+        requests = [{"type": "execute", "stmt": {"sql": s}} for s in stmts]
+        requests.append({"type": "close"})
+        results = self._pipeline(requests)
+        for r in results:
+            if r.get("type") == "error":
+                raise RuntimeError(r["error"]["message"])
+
+    def commit(self):
+        pass  # Each HTTP request is auto-committed
+
+    def rollback(self):
+        pass  # No transaction support in HTTP pipeline mode
+
+    def close(self):
+        self._client.close()
+
+    def sync(self):
+        pass  # Not an embedded replica
+
+
+# ── Connection management ────────────────────────────────────
+
+
 def _use_turso():
     return bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
 
 
 def get_connection():
     if _use_turso():
-        import libsql_experimental as libsql
-        conn = libsql.connect(
-            "local.db",
-            sync_url=TURSO_DATABASE_URL,
-            auth_token=TURSO_AUTH_TOKEN,
-        )
-        conn.sync()
-        return conn
+        return _TursoConnection(TURSO_DATABASE_URL, TURSO_AUTH_TOKEN)
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -130,8 +245,6 @@ def get_db():
     try:
         yield conn
         conn.commit()
-        if _use_turso():
-            conn.sync()
     except Exception:
         conn.rollback()
         raise
@@ -144,13 +257,16 @@ def init_db():
         conn.executescript(SCHEMA)
 
 
+# ── Data helpers ─────────────────────────────────────────────
+
+
 def upsert_founder(conn, *, name, handle, **kwargs):
     """Insert or update a founder by handle. Returns founder id."""
     existing = conn.execute(
         "SELECT id FROM founders WHERE handle = ?", (handle,)
     ).fetchone()
     if existing:
-        fid = existing["id"] if hasattr(existing, "__getitem__") and not isinstance(existing, tuple) else existing[0]
+        fid = existing["id"] if isinstance(existing, (dict, _TursoRow, sqlite3.Row)) else existing[0]
         filtered = {k: v for k, v in kwargs.items() if v is not None}
         if filtered:
             sets = ", ".join(f"{k} = ?" for k in filtered)
