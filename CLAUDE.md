@@ -34,7 +34,7 @@ VITE_API_URL=http://localhost:8000 npm run dev
 
 - `backend/api.py` — All API endpoints. The main one is `GET /api/founders` which uses `_build_founders_batch()` to efficiently batch Turso HTTP calls (5 queries in one pipeline instead of 4N+1). Response is paginated: `{ founders: [...], total, limit, offset }`.
 - `backend/db.py` — Database abstraction. `_TursoConnection` wraps Turso's HTTP pipeline API to look like sqlite3. Key method: `execute_batch()` batches multiple queries into a single HTTP call. `get_db()` context manager auto-selects Turso vs local SQLite based on env vars.
-- `backend/scoring.py` — 5-dimension scoring engine. Each dimension (momentum, domain, team, traction, ycfit) is scored 0-100 using log-scaled normalization. Composite = weighted average. Weights are in `WEIGHTS` dict.
+- `backend/scoring.py` — 5-dimension scoring engine. Dimensions: founder_quality (who is this person?), execution_velocity (are they building?), market_conviction (domain obsession), early_traction (community/market signals), deal_availability (still early enough?). Each scored 0-100 using log-scaled normalization. Composite = weighted average. Default weights in `DEFAULT_WEIGHTS` dict, tunable from the frontend UI.
 - `backend/pipeline.py` — Orchestrator: scrape all 3 sources -> score every founder -> check alerts. Can run one-shot (`python -m backend.pipeline`) or scheduled (`--schedule`).
 - `backend/scrapers/hn.py` — Searches Algolia for Show HN posts with 50+ points, fetches user profiles from Firebase API. No token needed.
 - `backend/scrapers/github.py` — Searches trending repos by topic, fetches user profiles, repos, and 90-day commit counts. Needs `GITHUB_TOKEN` for rate limits.
@@ -45,7 +45,7 @@ VITE_API_URL=http://localhost:8000 npm run dev
 
 ### Frontend
 
-- `src/App.jsx` — Entire dashboard in one file. Dark terminal UI with: header stats, source/status filters, search, sortable founder list, detail panel with score breakdown + signals. Fetches from `VITE_API_URL/api/founders?limit=50`. Shows loading spinner, error with retry, or empty state.
+- `src/App.jsx` — Entire dashboard in one file. Dark terminal UI with: header stats, source/status filters, search, sortable founder list, detail panel with score breakdown + weight tuning sliders + signals. Weight sliders recalculate composite scores client-side in real time. Fetches from `VITE_API_URL/api/founders?limit=50`. Shows loading spinner, error with retry, or empty state.
 
 ### Infrastructure
 
@@ -92,7 +92,7 @@ The db layer talks to Turso via its HTTP pipeline API (`/v3/pipeline`). Each `ex
 4. Add the source to the CHECK constraint in `db.py` schema (`founder_sources.source` and `signals.source`)
 
 ### Adjust scoring weights
-Edit `WEIGHTS` dict in `backend/scoring.py`. All weights must sum to 1.0.
+Default weights are in `DEFAULT_WEIGHTS` dict in `backend/scoring.py`. Users can also tune weights live via the dashboard UI sliders — composite scores recalculate client-side.
 
 ### Add a new alert channel
 Add a `_send_newchannel()` function in `backend/alerts.py`, then call it from `check_alerts()`.

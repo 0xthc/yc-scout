@@ -78,15 +78,15 @@ CREATE TABLE IF NOT EXISTS stats_snapshots (
 );
 
 CREATE TABLE IF NOT EXISTS scores (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
-    momentum    REAL DEFAULT 0,
-    domain_score REAL DEFAULT 0,
-    team        REAL DEFAULT 0,
-    traction    REAL DEFAULT 0,
-    ycfit       REAL DEFAULT 0,
-    composite   REAL DEFAULT 0,
-    scored_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    founder_id          INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
+    founder_quality     REAL DEFAULT 0,
+    execution_velocity  REAL DEFAULT 0,
+    market_conviction   REAL DEFAULT 0,
+    early_traction      REAL DEFAULT 0,
+    deal_availability   REAL DEFAULT 0,
+    composite           REAL DEFAULT 0,
+    scored_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS alert_log (
@@ -354,11 +354,11 @@ def save_stats(conn, founder_id, **stats):
     )
 
 
-def save_score(conn, founder_id, momentum, domain_score, team, traction, ycfit, composite):
+def save_score(conn, founder_id, founder_quality, execution_velocity, market_conviction, early_traction, deal_availability, composite):
     conn.execute(
-        """INSERT INTO scores (founder_id, momentum, domain_score, team, traction, ycfit, composite)
+        """INSERT INTO scores (founder_id, founder_quality, execution_velocity, market_conviction, early_traction, deal_availability, composite)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (founder_id, momentum, domain_score, team, traction, ycfit, composite),
+        (founder_id, founder_quality, execution_velocity, market_conviction, early_traction, deal_availability, composite),
     )
 
 
