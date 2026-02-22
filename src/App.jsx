@@ -18,6 +18,40 @@ const STATUS_CONFIG = {
 const SCORE_LABEL = (s) => s >= 90 ? "STRONG" : s >= 80 ? "GOOD" : s >= 70 ? "MONITOR" : "WEAK";
 const SCORE_COLOR = (s) => s >= 90 ? "#34d399" : s >= 80 ? "#f59e0b" : s >= 70 ? "#60a5fa" : "#6b7280";
 
+// Dimension display config
+const DIMENSIONS = {
+  founder_quality: { label: "Founder Quality", short: "Quality", desc: "Who is this person?" },
+  execution_velocity: { label: "Execution Velocity", short: "Execution", desc: "Are they actually building?" },
+  market_conviction: { label: "Market Conviction", short: "Conviction", desc: "Real obsession with a problem?" },
+  early_traction: { label: "Early Traction", short: "Traction", desc: "Is anyone actually caring?" },
+  deal_availability: { label: "Deal Availability", short: "Availability", desc: "Are you still early enough?" },
+};
+
+const DEFAULT_WEIGHTS = {
+  founder_quality: 0.30,
+  execution_velocity: 0.25,
+  market_conviction: 0.15,
+  early_traction: 0.20,
+  deal_availability: 0.10,
+};
+
+function computeComposite(breakdown, weights) {
+  let total = 0;
+  let weightSum = 0;
+  for (const [dim, w] of Object.entries(weights)) {
+    total += (breakdown[dim] || 0) * w;
+    weightSum += w;
+  }
+  return weightSum > 0 ? Math.round(total / weightSum * (weightSum)) : 0;
+}
+
+function reweightFounders(founders, weights) {
+  return founders.map(f => ({
+    ...f,
+    score: computeComposite(f.scoreBreakdown, weights),
+  }));
+}
+
 function ScoreRing({ score, size = 52 }) {
   const r = (size / 2) - 5;
   const circ = 2 * Math.PI * r;
@@ -40,16 +74,71 @@ function ScoreRing({ score, size = 52 }) {
   );
 }
 
-function ScoreBar({ label, value }) {
+function ScoreBar({ label, value, desc }) {
   const color = SCORE_COLOR(value);
   return (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-        <span style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "DM Mono, monospace" }}>{label}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, alignItems: "baseline" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <span style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "DM Mono, monospace" }}>{label}</span>
+          {desc && <span style={{ fontSize: 9, color: "#3d3d5c", fontStyle: "italic" }}>{desc}</span>}
+        </div>
         <span style={{ fontSize: 10, color, fontFamily: "DM Mono, monospace", fontWeight: 700 }}>{value}</span>
       </div>
       <div style={{ height: 3, background: "#1e1e2e", borderRadius: 2, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 2, transition: "width 0.6s ease" }} />
+      </div>
+    </div>
+  );
+}
+
+function WeightSlider({ dim, weight, onChange }) {
+  const cfg = DIMENSIONS[dim];
+  const pct = Math.round(weight * 100);
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+        <span style={{ fontSize: 9, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "DM Mono, monospace" }}>{cfg.short}</span>
+        <span style={{ fontSize: 9, color: "#7c3aed", fontFamily: "DM Mono, monospace", fontWeight: 700 }}>{pct}%</span>
+      </div>
+      <input
+        type="range" min="0" max="100" value={pct}
+        onChange={e => onChange(dim, parseInt(e.target.value) / 100)}
+        style={{
+          width: "100%", height: 3, appearance: "none", background: "#1e1e2e",
+          borderRadius: 2, outline: "none", cursor: "pointer",
+          accentColor: "#7c3aed",
+        }}
+      />
+    </div>
+  );
+}
+
+function WeightsPanel({ weights, onChange, onReset }) {
+  const isDefault = Object.entries(DEFAULT_WEIGHTS).every(
+    ([k, v]) => Math.abs((weights[k] || 0) - v) < 0.005
+  );
+  return (
+    <div style={{
+      background: "#08080f", border: "1px solid #13131f", borderRadius: 8,
+      padding: "14px 16px", marginBottom: 16,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "DM Mono, monospace" }}>
+          Weight Tuning
+        </div>
+        {!isDefault && (
+          <button onClick={onReset} style={{
+            fontSize: 9, color: "#7c3aed", background: "none", border: "1px solid #7c3aed33",
+            borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontFamily: "DM Mono, monospace",
+          }}>RESET</button>
+        )}
+      </div>
+      {Object.keys(DIMENSIONS).map(dim => (
+        <WeightSlider key={dim} dim={dim} weight={weights[dim] || 0} onChange={onChange} />
+      ))}
+      <div style={{ fontSize: 9, color: "#3d3d5c", fontFamily: "DM Mono, monospace", marginTop: 8, textAlign: "center" }}>
+        Composite scores recalculate live
       </div>
     </div>
   );
@@ -127,7 +216,7 @@ function FounderCard({ founder, onClick, selected }) {
   );
 }
 
-function DetailPanel({ founder, onStatusChange }) {
+function DetailPanel({ founder, onStatusChange, weights, onWeightChange, onWeightReset }) {
   if (!founder) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#2d2d44", fontSize: 13, fontFamily: "DM Mono, monospace" }}>
       &larr; SELECT A FOUNDER TO INSPECT
@@ -173,10 +262,13 @@ function DetailPanel({ founder, onStatusChange }) {
       {/* Score breakdown */}
       <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
         <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "DM Mono, monospace", marginBottom: 12 }}>Score Breakdown</div>
-        {Object.entries(founder.scoreBreakdown).map(([k, v]) => (
-          <ScoreBar key={k} label={k} value={v} />
+        {Object.entries(DIMENSIONS).map(([dim, cfg]) => (
+          <ScoreBar key={dim} label={cfg.label} value={founder.scoreBreakdown[dim] || 0} desc={cfg.desc} />
         ))}
       </div>
+
+      {/* Weight tuning */}
+      <WeightsPanel weights={weights} onChange={onWeightChange} onReset={onWeightReset} />
 
       {/* Signals */}
       <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
@@ -234,7 +326,7 @@ function DetailPanel({ founder, onStatusChange }) {
 const PAGE_SIZE = 50;
 
 export default function App() {
-  const [founders, setFounders] = useState([]);
+  const [rawFounders, setRawFounders] = useState([]);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState(null);
   const [filterSource, setFilterSource] = useState("all");
@@ -248,7 +340,24 @@ export default function App() {
   const [error, setError] = useState(null);
   const [live, setLive] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+  const [weights, setWeights] = useState({ ...DEFAULT_WEIGHTS });
   const listRef = useRef(null);
+
+  // Recompute scores when weights change
+  const founders = reweightFounders(rawFounders, weights);
+
+  // When selecting a founder, recompute their score too
+  const selectedFounder = selected
+    ? { ...selected, score: computeComposite(selected.scoreBreakdown, weights) }
+    : null;
+
+  const handleWeightChange = useCallback((dim, value) => {
+    setWeights(prev => ({ ...prev, [dim]: value }));
+  }, []);
+
+  const handleWeightReset = useCallback(() => {
+    setWeights({ ...DEFAULT_WEIGHTS });
+  }, []);
 
   // Debounce search input (300ms)
   useEffect(() => {
@@ -277,7 +386,7 @@ export default function App() {
       const res = await fetch(buildUrl(0));
       if (!res.ok) throw new Error(`API returned ${res.status}`);
       const data = await res.json();
-      setFounders(data.founders || []);
+      setRawFounders(data.founders || []);
       setTotal(data.total || 0);
       setLive(true);
       setLastSync(new Date());
@@ -291,20 +400,20 @@ export default function App() {
 
   // Load next page (infinite scroll)
   const loadMore = useCallback(async () => {
-    if (loadingMore || founders.length >= total) return;
+    if (loadingMore || rawFounders.length >= total) return;
     setLoadingMore(true);
     try {
-      const res = await fetch(buildUrl(founders.length));
+      const res = await fetch(buildUrl(rawFounders.length));
       if (!res.ok) return;
       const data = await res.json();
       const next = data.founders || [];
       if (next.length > 0) {
-        setFounders(prev => [...prev, ...next]);
+        setRawFounders(prev => [...prev, ...next]);
       }
     } catch { /* ignore */ } finally {
       setLoadingMore(false);
     }
-  }, [buildUrl, founders.length, total, loadingMore]);
+  }, [buildUrl, rawFounders.length, total, loadingMore]);
 
   // Initial load
   useEffect(() => {
@@ -342,7 +451,7 @@ export default function App() {
   const hasMore = founders.length < total;
 
   const handleStatusChange = async (id, newStatus) => {
-    setFounders(prev => prev.map(f => f.id === id ? { ...f, status: newStatus } : f));
+    setRawFounders(prev => prev.map(f => f.id === id ? { ...f, status: newStatus } : f));
     setSelected(prev => prev?.id === id ? { ...prev, status: newStatus } : prev);
     if (API_BASE) {
       try {
@@ -515,7 +624,13 @@ export default function App() {
 
         {/* Detail panel */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          <DetailPanel founder={selected} onStatusChange={handleStatusChange} />
+          <DetailPanel
+            founder={selectedFounder}
+            onStatusChange={handleStatusChange}
+            weights={weights}
+            onWeightChange={handleWeightChange}
+            onWeightReset={handleWeightReset}
+          />
         </div>
       </div>
 

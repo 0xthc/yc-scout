@@ -19,7 +19,7 @@ DEMO_FOUNDERS = [
             {"source": "github", "label": "3 new repos: fin-stream, edge-cache, devkit", "strong": False},
         ],
         "stats": {"github_stars": 2840, "hn_karma": 4210, "followers": 12400},
-        "scores": {"momentum": 92, "domain_score": 96, "team": 88, "traction": 97, "ycfit": 95, "composite": 94},
+        "scores": {"founder_quality": 92, "execution_velocity": 95, "market_conviction": 88, "early_traction": 94, "deal_availability": 78, "composite": 91},
     },
     {
         "name": "Marcus Webb", "handle": "@marcuswebb", "location": "New York, NY",
@@ -34,7 +34,7 @@ DEMO_FOUNDERS = [
             {"source": "hn", "label": "Show HN: AI clinical trial matching — 512 points", "strong": True},
         ],
         "stats": {"github_stars": 340, "hn_karma": 2870, "followers": 5800},
-        "scores": {"momentum": 85, "domain_score": 94, "team": 91, "traction": 82, "ycfit": 90, "composite": 89},
+        "scores": {"founder_quality": 85, "execution_velocity": 82, "market_conviction": 94, "early_traction": 80, "deal_availability": 88, "composite": 85},
     },
     {
         "name": "Priya Nair", "handle": "@priya_nair_dev", "location": "London, UK",
@@ -49,7 +49,7 @@ DEMO_FOUNDERS = [
             {"source": "producthunt", "label": "#1 Product of the Day — MLCompile", "strong": True},
         ],
         "stats": {"github_stars": 2800, "hn_karma": 6140, "followers": 28000},
-        "scores": {"momentum": 98, "domain_score": 89, "team": 90, "traction": 86, "ycfit": 88, "composite": 91},
+        "scores": {"founder_quality": 96, "execution_velocity": 98, "market_conviction": 86, "early_traction": 90, "deal_availability": 62, "composite": 89},
     },
     {
         "name": "Jordan Cole", "handle": "@jordancole", "location": "Austin, TX",
@@ -64,7 +64,7 @@ DEMO_FOUNDERS = [
             {"source": "hn", "label": "Show HN: Construction PM tool — $18k MRR", "strong": True},
         ],
         "stats": {"github_stars": 0, "hn_karma": 1540, "followers": 7200},
-        "scores": {"momentum": 80, "domain_score": 78, "team": 97, "traction": 95, "ycfit": 82, "composite": 86},
+        "scores": {"founder_quality": 88, "execution_velocity": 80, "market_conviction": 82, "early_traction": 92, "deal_availability": 52, "composite": 81},
     },
     {
         "name": "Elif Demir", "handle": "@elifdemir", "location": "Berlin, DE",
@@ -79,7 +79,7 @@ DEMO_FOUNDERS = [
             {"source": "github", "label": "Released v0.3 — 680 GitHub stars", "strong": False},
         ],
         "stats": {"github_stars": 680, "hn_karma": 890, "followers": 3100},
-        "scores": {"momentum": 82, "domain_score": 85, "team": 72, "traction": 70, "ycfit": 75, "composite": 78},
+        "scores": {"founder_quality": 72, "execution_velocity": 78, "market_conviction": 80, "early_traction": 65, "deal_availability": 92, "composite": 76},
     },
     {
         "name": "Tomas Rivera", "handle": "@tomas_build", "location": "Mexico City, MX",
@@ -93,7 +93,7 @@ DEMO_FOUNDERS = [
             {"source": "github", "label": "SDK released — 420 stars", "strong": False},
         ],
         "stats": {"github_stars": 420, "hn_karma": 2100, "followers": 8900},
-        "scores": {"momentum": 78, "domain_score": 88, "team": 86, "traction": 90, "ycfit": 80, "composite": 83},
+        "scores": {"founder_quality": 86, "execution_velocity": 75, "market_conviction": 90, "early_traction": 82, "deal_availability": 55, "composite": 79},
     },
 ]
 
