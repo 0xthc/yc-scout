@@ -18,7 +18,7 @@ DEMO_FOUNDERS = [
             {"source": "hn", "label": "Show HN: Live market data API — 847 points", "strong": True},
             {"source": "github", "label": "3 new repos: fin-stream, edge-cache, devkit", "strong": False},
         ],
-        "stats": {"github_stars": 2840, "hn_karma": 4210, "followers": 12400},
+        "stats": {"github_stars": 2840, "github_commits_90d": 482, "github_repos": 12, "hn_karma": 4210, "hn_submissions": 8, "hn_top_score": 847, "ph_upvotes": 0, "ph_launches": 0, "followers": 12400},
         "scores": {"founder_quality": 92, "execution_velocity": 95, "market_conviction": 88, "early_traction": 94, "deal_availability": 78, "composite": 91},
     },
     {
@@ -33,7 +33,7 @@ DEMO_FOUNDERS = [
             {"source": "producthunt", "label": "#2 Product of the Day — TrialMatch AI", "strong": True},
             {"source": "hn", "label": "Show HN: AI clinical trial matching — 512 points", "strong": True},
         ],
-        "stats": {"github_stars": 340, "hn_karma": 2870, "followers": 5800},
+        "stats": {"github_stars": 340, "github_commits_90d": 156, "github_repos": 4, "hn_karma": 2870, "hn_submissions": 6, "hn_top_score": 512, "ph_upvotes": 890, "ph_launches": 1, "followers": 5800},
         "scores": {"founder_quality": 85, "execution_velocity": 82, "market_conviction": 94, "early_traction": 80, "deal_availability": 88, "composite": 85},
     },
     {
@@ -48,7 +48,7 @@ DEMO_FOUNDERS = [
             {"source": "hn", "label": "Show HN: Open-source ML compiler — 1.2k points", "strong": True},
             {"source": "producthunt", "label": "#1 Product of the Day — MLCompile", "strong": True},
         ],
-        "stats": {"github_stars": 2800, "hn_karma": 6140, "followers": 28000},
+        "stats": {"github_stars": 2800, "github_commits_90d": 620, "github_repos": 9, "hn_karma": 6140, "hn_submissions": 12, "hn_top_score": 1200, "ph_upvotes": 1450, "ph_launches": 2, "followers": 28000},
         "scores": {"founder_quality": 96, "execution_velocity": 98, "market_conviction": 86, "early_traction": 90, "deal_availability": 62, "composite": 89},
     },
     {
@@ -63,7 +63,7 @@ DEMO_FOUNDERS = [
             {"source": "producthunt", "label": "#3 Product of the Week", "strong": True},
             {"source": "hn", "label": "Show HN: Construction PM tool — $18k MRR", "strong": True},
         ],
-        "stats": {"github_stars": 0, "hn_karma": 1540, "followers": 7200},
+        "stats": {"github_stars": 0, "github_commits_90d": 45, "github_repos": 2, "hn_karma": 1540, "hn_submissions": 4, "hn_top_score": 380, "ph_upvotes": 720, "ph_launches": 1, "followers": 7200},
         "scores": {"founder_quality": 88, "execution_velocity": 80, "market_conviction": 82, "early_traction": 92, "deal_availability": 52, "composite": 81},
     },
     {
@@ -78,7 +78,7 @@ DEMO_FOUNDERS = [
             {"source": "producthunt", "label": "Upcoming launch — 1,400 subscribers", "strong": True},
             {"source": "github", "label": "Released v0.3 — 680 GitHub stars", "strong": False},
         ],
-        "stats": {"github_stars": 680, "hn_karma": 890, "followers": 3100},
+        "stats": {"github_stars": 680, "github_commits_90d": 240, "github_repos": 3, "hn_karma": 890, "hn_submissions": 2, "hn_top_score": 85, "ph_upvotes": 320, "ph_launches": 0, "followers": 3100},
         "scores": {"founder_quality": 72, "execution_velocity": 78, "market_conviction": 80, "early_traction": 65, "deal_availability": 92, "composite": 76},
     },
     {
@@ -92,7 +92,7 @@ DEMO_FOUNDERS = [
             {"source": "hn", "label": "Show HN: Stripe alternative for LatAm — 390 pts", "strong": True},
             {"source": "github", "label": "SDK released — 420 stars", "strong": False},
         ],
-        "stats": {"github_stars": 420, "hn_karma": 2100, "followers": 8900},
+        "stats": {"github_stars": 420, "github_commits_90d": 310, "github_repos": 7, "hn_karma": 2100, "hn_submissions": 5, "hn_top_score": 390, "ph_upvotes": 0, "ph_launches": 0, "followers": 8900},
         "scores": {"founder_quality": 86, "execution_velocity": 75, "market_conviction": 90, "early_traction": 82, "deal_availability": 55, "composite": 79},
     },
 ]

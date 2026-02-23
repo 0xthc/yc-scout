@@ -144,7 +144,13 @@ def _build_founder(conn, row) -> dict:
         "scoreBreakdown": _extract_breakdown(score_row),
         "signals": signals,
         "github_stars": stats_row["github_stars"] if stats_row else 0,
+        "github_commits_90d": stats_row["github_commits_90d"] if stats_row else 0,
+        "github_repos": stats_row["github_repos"] if stats_row else 0,
         "hn_karma": stats_row["hn_karma"] if stats_row else 0,
+        "hn_submissions": stats_row["hn_submissions"] if stats_row else 0,
+        "hn_top_score": stats_row["hn_top_score"] if stats_row else 0,
+        "ph_upvotes": stats_row["ph_upvotes"] if stats_row else 0,
+        "ph_launches": stats_row["ph_launches"] if stats_row else 0,
         "followers": stats_row["followers"] if stats_row else 0,
     }
 
@@ -236,7 +242,13 @@ def _build_founders_batch(conn, rows):
             "scoreBreakdown": _extract_breakdown(score_row),
             "signals": signals_map.get(fid, []),
             "github_stars": stats_row["github_stars"] if stats_row else 0,
+            "github_commits_90d": stats_row["github_commits_90d"] if stats_row else 0,
+            "github_repos": stats_row["github_repos"] if stats_row else 0,
             "hn_karma": stats_row["hn_karma"] if stats_row else 0,
+            "hn_submissions": stats_row["hn_submissions"] if stats_row else 0,
+            "hn_top_score": stats_row["hn_top_score"] if stats_row else 0,
+            "ph_upvotes": stats_row["ph_upvotes"] if stats_row else 0,
+            "ph_launches": stats_row["ph_launches"] if stats_row else 0,
             "followers": stats_row["followers"] if stats_row else 0,
         })
     return founders

@@ -74,10 +74,10 @@ function ScoreRing({ score, size = 52 }) {
   );
 }
 
-function ScoreBar({ label, value, desc }) {
+function ScoreBar({ label, value, desc, evidence }) {
   const color = SCORE_COLOR(value);
   return (
-    <div style={{ marginBottom: 8 }}>
+    <div style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, alignItems: "baseline" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
           <span style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "DM Mono, monospace" }}>{label}</span>
@@ -88,8 +88,60 @@ function ScoreBar({ label, value, desc }) {
       <div style={{ height: 3, background: "#1e1e2e", borderRadius: 2, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 2, transition: "width 0.6s ease" }} />
       </div>
+      {evidence && evidence.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5 }}>
+          {evidence.map((ev, i) => (
+            <span key={i} style={{
+              fontSize: 9, color: ev.highlight ? "#e2e8f0" : "#4b5563", fontFamily: "DM Mono, monospace",
+              padding: "2px 6px", background: ev.highlight ? "rgba(124,58,237,0.12)" : "#0a0a14",
+              border: `1px solid ${ev.highlight ? "#7c3aed33" : "#13131f"}`, borderRadius: 3,
+            }}>{ev.label}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function getDimensionEvidence(dim, founder) {
+  switch (dim) {
+    case "founder_quality":
+      return [
+        founder.github_repos > 0 && { label: `${founder.github_repos} repos`, highlight: founder.github_repos >= 8 },
+        founder.github_stars > 0 && { label: `${founder.github_stars.toLocaleString()} stars`, highlight: founder.github_stars >= 1000 },
+        founder.yc_alumni_connections > 0 && { label: `${founder.yc_alumni_connections} YC connections`, highlight: founder.yc_alumni_connections >= 3 },
+        founder.hn_karma > 0 && { label: `${founder.hn_karma.toLocaleString()} HN karma`, highlight: founder.hn_karma >= 3000 },
+      ].filter(Boolean);
+    case "execution_velocity":
+      return [
+        founder.github_commits_90d > 0 && { label: `${founder.github_commits_90d} commits/90d`, highlight: founder.github_commits_90d >= 200 },
+        founder.github_repos > 0 && { label: `${founder.github_repos} repos`, highlight: founder.github_repos >= 6 },
+        founder.signals && { label: `${founder.signals.length} signals`, highlight: founder.signals.length >= 3 },
+        founder.signals && { label: `${founder.signals.filter(s => s.strong).length} strong`, highlight: founder.signals.filter(s => s.strong).length >= 2 },
+      ].filter(Boolean);
+    case "market_conviction":
+      return [
+        founder.domain && { label: founder.domain, highlight: true },
+        ...(founder.tags || []).slice(0, 4).map(t => ({ label: `#${t}`, highlight: false })),
+        founder.hn_submissions > 0 && { label: `${founder.hn_submissions} HN posts`, highlight: founder.hn_submissions >= 5 },
+      ].filter(Boolean);
+    case "early_traction":
+      return [
+        founder.github_stars > 0 && { label: `${founder.github_stars.toLocaleString()} GH stars`, highlight: founder.github_stars >= 500 },
+        founder.hn_top_score > 0 && { label: `HN top: ${founder.hn_top_score} pts`, highlight: founder.hn_top_score >= 300 },
+        founder.ph_upvotes > 0 && { label: `${founder.ph_upvotes} PH upvotes`, highlight: founder.ph_upvotes >= 500 },
+        founder.ph_launches > 0 && { label: `${founder.ph_launches} PH launches`, highlight: founder.ph_launches >= 1 },
+        founder.followers > 0 && { label: `${(founder.followers / 1000).toFixed(1)}k followers`, highlight: founder.followers >= 10000 },
+      ].filter(Boolean);
+    case "deal_availability":
+      return [
+        founder.stage && { label: founder.stage, highlight: ["Pre-seed", "Bootstrapped"].includes(founder.stage) },
+        founder.founded && { label: `Founded ${founder.founded}`, highlight: false },
+        founder.status && { label: STATUS_CONFIG[founder.status]?.label || founder.status, highlight: founder.status === "to_contact" },
+      ].filter(Boolean);
+    default:
+      return [];
+  }
 }
 
 function WeightSlider({ dim, weight, onChange }) {
@@ -196,13 +248,16 @@ function FounderCard({ founder, onClick, selected }) {
         <Avatar initials={founder.avatar} score={founder.score} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "Syne, sans-serif" }}>{founder.name}</span>
-              <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace" }}>{founder.handle}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0", fontFamily: "Syne, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{founder.company || founder.name}</span>
+              {founder.stage && <span style={{ fontSize: 9, color: "#7c3aed", fontFamily: "DM Mono, monospace", padding: "1px 5px", background: "rgba(124,58,237,0.1)", borderRadius: 3, flexShrink: 0 }}>{founder.stage}</span>}
             </div>
             <ScoreRing score={founder.score} size={36} />
           </div>
-          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6, lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{founder.bio}</div>
+          <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "DM Mono, monospace", marginBottom: 4 }}>
+            {founder.name} {founder.handle && <span style={{ color: "#4b5563" }}>{founder.handle}</span>}
+          </div>
+          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6, lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{founder.bio}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             {founder.sources.map(s => <SourceBadge key={s} source={s} />)}
             <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace" }}>·</span>
@@ -232,11 +287,13 @@ function DetailPanel({ founder, onStatusChange, weights, onWeightChange, onWeigh
       <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 24, paddingBottom: 20, borderBottom: "1px solid #13131f" }}>
         <Avatar initials={founder.avatar} score={founder.score} />
         <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#e2e8f0", fontFamily: "Syne, sans-serif" }}>{founder.name}</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#e2e8f0", fontFamily: "Syne, sans-serif" }}>{founder.company || founder.name}</h2>
+            {founder.stage && <span style={{ fontSize: 10, color: "#7c3aed", fontFamily: "DM Mono, monospace", padding: "2px 7px", background: "rgba(124,58,237,0.1)", borderRadius: 4 }}>{founder.stage}</span>}
             <StatusBadge status={founder.status} onClick={() => onStatusChange(founder.id, nextStatus)} />
           </div>
-          <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "DM Mono, monospace", marginBottom: 6 }}>{founder.handle} · {founder.location}</div>
+          <div style={{ fontSize: 12, color: "#9ca3af", fontFamily: "DM Mono, monospace", marginBottom: 4 }}>{founder.name} <span style={{ color: "#4b5563" }}>{founder.handle}</span></div>
+          <div style={{ fontSize: 11, color: "#4b5563", fontFamily: "DM Mono, monospace", marginBottom: 6 }}>{founder.domain} · {founder.location}</div>
           <p style={{ margin: 0, fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>{founder.bio}</p>
         </div>
         <div style={{ textAlign: "center" }}>
@@ -246,24 +303,27 @@ function DetailPanel({ founder, onStatusChange, weights, onWeightChange, onWeigh
       </div>
 
       {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 20 }}>
         {[
-          { label: "GH Stars", value: founder.github_stars.toLocaleString() },
-          { label: "HN Karma", value: founder.hn_karma.toLocaleString() },
-          { label: "Followers", value: (founder.followers / 1000).toFixed(1) + "k" },
-        ].map(({ label, value }) => (
-          <div key={label} style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0", fontFamily: "DM Mono, monospace" }}>{value}</div>
+          { label: "GH Stars", value: founder.github_stars.toLocaleString(), accent: "#58a6ff" },
+          { label: "Commits/90d", value: (founder.github_commits_90d || 0).toLocaleString(), accent: "#58a6ff" },
+          { label: "HN Karma", value: founder.hn_karma.toLocaleString(), accent: "#ff6600" },
+          { label: "HN Top", value: (founder.hn_top_score || 0).toLocaleString() + " pts", accent: "#ff6600" },
+          { label: "PH Upvotes", value: (founder.ph_upvotes || 0).toLocaleString(), accent: "#da552f" },
+          { label: "Followers", value: founder.followers >= 1000 ? (founder.followers / 1000).toFixed(1) + "k" : founder.followers.toString(), accent: "#7c3aed" },
+        ].map(({ label, value, accent }) => (
+          <div key={label} style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "8px 10px" }}>
+            <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 3 }}>{label}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: accent, fontFamily: "DM Mono, monospace" }}>{value}</div>
           </div>
         ))}
       </div>
 
-      {/* Score breakdown */}
+      {/* Score breakdown with evidence */}
       <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
         <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "DM Mono, monospace", marginBottom: 12 }}>Score Breakdown</div>
         {Object.entries(DIMENSIONS).map(([dim, cfg]) => (
-          <ScoreBar key={dim} label={cfg.label} value={founder.scoreBreakdown[dim] || 0} desc={cfg.desc} />
+          <ScoreBar key={dim} label={cfg.label} value={founder.scoreBreakdown[dim] || 0} desc={cfg.desc} evidence={getDimensionEvidence(dim, founder)} />
         ))}
       </div>
 
@@ -286,17 +346,18 @@ function DetailPanel({ founder, onStatusChange, weights, onWeightChange, onWeigh
       </div>
 
       {/* Meta */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "12px 14px" }}>
-          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>Company</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "Syne, sans-serif", marginBottom: 4 }}>{founder.company}</div>
-          <div style={{ fontSize: 11, color: "#7c3aed" }}>{founder.stage}</div>
-          <div style={{ fontSize: 10, color: "#4b5563", marginTop: 4, fontFamily: "DM Mono, monospace" }}>Founded {founder.founded}</div>
+          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>Founded</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", fontFamily: "DM Mono, monospace" }}>{founder.founded || "—"}</div>
         </div>
         <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "12px 14px" }}>
-          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>Network</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: founder.yc_alumni_connections > 0 ? "#34d399" : "#4b5563", fontFamily: "DM Mono, monospace" }}>{founder.yc_alumni_connections}</div>
-          <div style={{ fontSize: 10, color: "#6b7280" }}>YC alumni connections</div>
+          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>YC Network</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: founder.yc_alumni_connections > 0 ? "#34d399" : "#4b5563", fontFamily: "DM Mono, monospace" }}>{founder.yc_alumni_connections} <span style={{ fontSize: 10, fontWeight: 400, color: "#6b7280" }}>alumni</span></div>
+        </div>
+        <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "12px 14px" }}>
+          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>Repos</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#58a6ff", fontFamily: "DM Mono, monospace" }}>{founder.github_repos || 0}</div>
         </div>
       </div>
 
