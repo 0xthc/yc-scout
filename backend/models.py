@@ -15,6 +15,10 @@ class FounderOut(BaseModel):
     status: str
     yc_alumni_connections: int
     incubator: str
+    email: str
+    twitter: str
+    linkedin: str
+    website: str
     sources: list[str]
     tags: list[str]
     score: int
@@ -40,6 +44,13 @@ class PaginatedFounders(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+
+
+class ContactUpdate(BaseModel):
+    email: str | None = None
+    twitter: str | None = None
+    linkedin: str | None = None
+    website: str | None = None
 
 
 class PipelineResult(BaseModel):
