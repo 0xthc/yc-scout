@@ -118,17 +118,18 @@ def scrape_github(conn, search_queries=None, num_days=90):
             f"stars:>50 pushed:>{cutoff} topic:platform",
             f"stars:>30 pushed:>{cutoff} topic:b2b",
             f"stars:>30 pushed:>{cutoff} topic:marketplace",
-            # Early-stage: repos created in the last 30 days with any traction
-            # (lower star threshold — these are month-1 projects pre-raise)
-            f"stars:>10 created:>{early_cutoff} topic:api",
-            f"stars:>10 created:>{early_cutoff} topic:saas",
-            f"stars:>10 created:>{early_cutoff} topic:ai",
-            f"stars:>10 created:>{early_cutoff} topic:devtools",
-            f"stars:>10 created:>{early_cutoff} topic:infrastructure",
-            f"stars:>10 created:>{early_cutoff} topic:fintech",
-            f"stars:>10 created:>{early_cutoff} topic:database",
-            f"stars:>10 created:>{early_cutoff} topic:machine-learning",
-            # Incubator-affiliated repos (any age, any stars)
+            # Early-stage: repos created in the last 30 days with real traction.
+            # 25+ stars in <30 days = meaningful signal (not a weekend tutorial).
+            # Also require recent push to filter out abandoned experiments.
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:api",
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:saas",
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:ai",
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:devtools",
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:infrastructure",
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:fintech",
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:database",
+            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:machine-learning",
+            # Incubator-affiliated repos (lower bar — the topic itself is the signal)
             f"stars:>5 pushed:>{cutoff} topic:ycombinator",
             f"stars:>5 pushed:>{cutoff} topic:yc",
             f"stars:>5 pushed:>{cutoff} topic:500startups",
