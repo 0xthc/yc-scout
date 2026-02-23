@@ -646,6 +646,46 @@ function FounderDetail({ founder, onStatusChange, onNotesChange }) {
         </Card>
       )}
 
+      {/* Enrichment */}
+      {(founder.twitter_handle || founder.linkedin_summary || founder.is_serial_founder) && (
+        <Card style={{ padding: 16, marginBottom: 16 }}>
+          <SectionTitle>Enrichment</SectionTitle>
+          {founder.twitter_handle && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{founder.twitter_handle}</div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>Twitter / X</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                {founder.twitter_followers > 0 && (
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.blue, fontFamily: "ui-monospace, monospace" }}>
+                    {founder.twitter_followers >= 1000 ? `${(founder.twitter_followers / 1000).toFixed(1)}k` : founder.twitter_followers}
+                    <span style={{ fontSize: 10, fontWeight: 400, color: C.textMuted }}> followers</span>
+                  </div>
+                )}
+                {founder.twitter_engagement_rate > 0 && (
+                  <div style={{ fontSize: 11, color: C.textMuted }}>{founder.twitter_engagement_rate} avg engagement</div>
+                )}
+              </div>
+            </div>
+          )}
+          {founder.linkedin_summary && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.textSub, marginBottom: 3 }}>LinkedIn Summary</div>
+              <p style={{ margin: 0, fontSize: 12, color: C.textSub, lineHeight: 1.5 }}>{founder.linkedin_summary}</p>
+            </div>
+          )}
+          {founder.is_serial_founder && (
+            <Badge color={C.accent} bg={C.accentLight} border={C.accentBorder}>Serial Founder</Badge>
+          )}
+          {founder.enriched_at && (
+            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8 }}>
+              Enriched {new Date(founder.enriched_at).toLocaleDateString()}
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Tags */}
       {founder.tags?.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>

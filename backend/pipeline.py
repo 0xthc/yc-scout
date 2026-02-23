@@ -24,6 +24,7 @@ from backend.clustering import cluster_founders
 from backend.config import PIPELINE_INTERVAL_MINUTES
 from backend.db import get_db, init_db
 from backend.embedder import embed_all_founders
+from backend.enrichment import enrich_qualified_founders
 from backend.scoring import score_founder
 from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, enrich_founders
 
@@ -126,7 +127,16 @@ def run_pipeline():
             except Exception as e:
                 logger.error("Alert check failed for founder %d: %s", fid, e)
 
-    # Phase 3.5: Anomaly detection
+    # Phase 3.5: External enrichment (Apify + Proxycurl) — gate applies score threshold
+    with get_db() as conn:
+        logger.info("Phase 3.5: External enrichment (Twitter + LinkedIn)")
+        try:
+            enriched = enrich_qualified_founders(conn)
+            logger.info("Enriched %d founders", enriched)
+        except Exception as e:
+            logger.error("Enrichment phase failed: %s", e)
+
+    # Phase 3.7: Anomaly detection
     with get_db() as conn:
         logger.info("Phase 3.5: Detecting anomalies")
         try:

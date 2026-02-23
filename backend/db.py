@@ -373,7 +373,22 @@ def _migrate_scores_columns(conn):
     try:
         conn.execute("ALTER TABLE founders ADD COLUMN notes TEXT DEFAULT ''")
     except Exception:
-        pass  # Column already exists
+        pass
+
+    # Enrichment columns
+    for col, definition in [
+        ("enriched_at", "TIMESTAMP"),
+        ("twitter_handle", "TEXT DEFAULT ''"),
+        ("twitter_followers", "INTEGER DEFAULT 0"),
+        ("twitter_engagement_rate", "REAL DEFAULT 0"),
+        ("linkedin_url", "TEXT DEFAULT ''"),
+        ("linkedin_summary", "TEXT DEFAULT ''"),
+        ("is_serial_founder", "BOOLEAN DEFAULT 0"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE founders ADD COLUMN {col} {definition}")
+        except Exception:
+            pass  # Column already exists
 
 
 # ── Data helpers ─────────────────────────────────────────────

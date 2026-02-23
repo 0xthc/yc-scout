@@ -26,3 +26,12 @@ ALERT_MOMENTUM_SPIKE = float(os.getenv("ALERT_MOMENTUM_SPIKE", "15.0"))
 
 # Pipeline schedule (minutes between runs)
 PIPELINE_INTERVAL_MINUTES = int(os.getenv("PIPELINE_INTERVAL_MINUTES", "60"))
+
+# Enrichment — only fires after a founder crosses this score threshold
+ENRICHMENT_SCORE_THRESHOLD = int(os.getenv("ENRICHMENT_SCORE_THRESHOLD", "75"))
+
+# Apify — Twitter/X profile enrichment
+APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN", "")
+
+# Proxycurl — LinkedIn profile enrichment
+PROXYCURL_API_KEY = os.getenv("PROXYCURL_API_KEY", "")
