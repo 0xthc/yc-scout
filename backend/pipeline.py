@@ -1,10 +1,17 @@
 """
-Pipeline orchestrator — scrape → score → alert.
+Pipeline orchestrator — scrape → enrich → score → alert.
 
 Can run as:
   1. One-shot: `python -m backend.pipeline`
   2. Scheduled: `python -m backend.pipeline --schedule`
   3. API trigger: POST /api/pipeline/run
+
+Phases:
+  1. Scrape — discover founders from HN, GitHub, Product Hunt (90-day windows)
+  2. Enrich — cross-platform lookup: for each founder, check platforms they
+     weren't discovered on (e.g. found on HN → also check GitHub & PH)
+  3. Score — compute 5-dimension scores for every founder
+  4. Alert — check score thresholds, send notifications
 """
 
 import argparse
@@ -15,7 +22,7 @@ from backend.alerts import check_alerts
 from backend.config import PIPELINE_INTERVAL_MINUTES
 from backend.db import get_db, init_db
 from backend.scoring import score_founder
-from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt
+from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, enrich_founders
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,9 +58,18 @@ def run_pipeline():
         except Exception as e:
             logger.error("Product Hunt scraper failed: %s", e)
 
-    # Phase 2: Score all founders
+    # Phase 2: Cross-platform enrichment
     with get_db() as conn:
-        logger.info("Phase 2: Scoring founders")
+        logger.info("Phase 2: Cross-platform enrichment")
+        try:
+            enriched = enrich_founders(conn)
+            logger.info("Enrichment added %d new source links", enriched)
+        except Exception as e:
+            logger.error("Enrichment failed: %s", e)
+
+    # Phase 3: Score all founders
+    with get_db() as conn:
+        logger.info("Phase 3: Scoring founders")
         founders = conn.execute("SELECT * FROM founders").fetchall()
 
         for f in founders:
@@ -74,7 +90,7 @@ def run_pipeline():
                 logger.error("Scoring failed for founder %d: %s", fid, e)
                 continue
 
-            # Phase 3: Check alerts for this founder
+            # Phase 4: Check alerts for this founder
             try:
                 def log_alert(founder_id, alert_type, channel, message):
                     conn.execute(

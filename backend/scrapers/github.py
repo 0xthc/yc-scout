@@ -83,25 +83,37 @@ def _commit_count_90d(username):
         return 0
 
 
-def scrape_github(conn, search_queries=None):
+def scrape_github(conn, search_queries=None, num_days=90):
     """
     Scrape GitHub for founder signals.
 
     Args:
         conn: SQLite connection
         search_queries: Optional list of repo search queries.
+        num_days: How far back to look for active repos (default 90 days).
 
     Returns:
         Number of founders processed.
     """
     if search_queries is None:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d")
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=num_days)).strftime("%Y-%m-%d")
         search_queries = [
             f"stars:>100 pushed:>{cutoff} topic:api",
             f"stars:>100 pushed:>{cutoff} topic:saas",
             f"stars:>100 pushed:>{cutoff} topic:ai",
             f"stars:>100 pushed:>{cutoff} topic:infrastructure",
             f"stars:>50 pushed:>{cutoff} topic:devtools",
+            f"stars:>50 pushed:>{cutoff} topic:developer-tools",
+            f"stars:>50 pushed:>{cutoff} topic:fintech",
+            f"stars:>50 pushed:>{cutoff} topic:healthtech",
+            f"stars:>50 pushed:>{cutoff} topic:database",
+            f"stars:>50 pushed:>{cutoff} topic:security",
+            f"stars:>50 pushed:>{cutoff} topic:analytics",
+            f"stars:>50 pushed:>{cutoff} topic:machine-learning",
+            f"stars:>50 pushed:>{cutoff} topic:cli",
+            f"stars:>50 pushed:>{cutoff} topic:platform",
+            f"stars:>30 pushed:>{cutoff} topic:b2b",
+            f"stars:>30 pushed:>{cutoff} topic:marketplace",
         ]
 
     seen_users = set()

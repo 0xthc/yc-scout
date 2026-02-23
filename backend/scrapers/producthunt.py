@@ -270,7 +270,7 @@ def _match_github_user(conn, gh_username):
 # ── Main scraper ──────────────────────────────────────────────
 
 
-def scrape_producthunt(conn, pages=3, per_page=20):
+def scrape_producthunt(conn, pages=10, per_page=20):
     """
     Scrape Product Hunt for founder signals (product-centric approach).
 
