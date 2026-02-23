@@ -112,10 +112,10 @@ function SectionTitle({ children }) {
   );
 }
 
-function EmptyState({ icon, title, sub }) {
+function EmptyState({ title, sub }) {
   return (
     <div style={{ padding: 60, textAlign: "center" }}>
-      <div style={{ fontSize: 36, marginBottom: 12 }}>{icon}</div>
+      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.accentLight, border: `1px solid ${C.accentBorder}`, margin: "0 auto 16px" }} />
       <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 13, color: C.textMuted }}>{sub}</div>
     </div>
@@ -126,7 +126,7 @@ function EmptyState({ icon, title, sub }) {
 
 const VIEWS = ["themes", "emergence", "pulse", "scouting"];
 const VIEW_LABELS = { themes: "Themes", emergence: "Emergence", pulse: "Pulse", scouting: "Scouting" };
-const VIEW_ICONS = { themes: "🧩", emergence: "⚡", pulse: "📡", scouting: "🎯" };
+const VIEW_ICONS = { themes: "", emergence: "", pulse: "", scouting: "" };
 
 function TopNav({ view, setView, stats }) {
   return (
@@ -141,9 +141,7 @@ function TopNav({ view, setView, stats }) {
           <div style={{
             width: 28, height: 28, borderRadius: 8,
             background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14,
-          }}>🔮</div>
+          }} />
           <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: "-0.02em" }}>Precognition</span>
           <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 500 }}>· VC Intelligence</span>
         </div>
@@ -157,7 +155,7 @@ function TopNav({ view, setView, stats }) {
               background: view === v ? C.accentLight : "transparent",
               color: view === v ? C.accent : C.textSub,
             }}>
-              {VIEW_ICONS[v]} {VIEW_LABELS[v]}
+              {VIEW_LABELS[v]}
             </button>
           ))}
         </nav>
@@ -266,7 +264,7 @@ function ThemesView() {
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>Loading themes…</div>;
 
   if (themes.length === 0) return (
-    <EmptyState icon="🧩" title="No themes detected yet"
+    <EmptyState title="No themes detected yet"
       sub="Run the pipeline with 20+ founders to detect emerging clusters" />
   );
 
@@ -326,11 +324,8 @@ function EmergenceCard({ event }) {
     <Card style={{ padding: 16, display: "flex", gap: 14, alignItems: "flex-start" }}>
       <div style={{
         width: 36, height: 36, borderRadius: 10, background: cfg.bg,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 16, flexShrink: 0,
-      }}>
-        {isTheme ? "🧩" : "👤"}
-      </div>
+        border: `1px solid ${cfg.color}20`, flexShrink: 0,
+      }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
@@ -372,7 +367,7 @@ function EmergenceView() {
     .sort((a, b) => new Date(b.detectedAt) - new Date(a.detectedAt));
 
   if (all.length === 0) return (
-    <EmptyState icon="⚡" title="No emergence events yet"
+    <EmptyState title="No emergence events yet"
       sub="Events appear when founders cross velocity thresholds or new theme clusters are detected" />
   );
 
@@ -416,7 +411,7 @@ function PulseView() {
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>Loading…</div>;
 
   if (signals.length === 0) return (
-    <EmptyState icon="📡" title="No signals in the last 48 hours"
+    <EmptyState title="No signals in the last 48 hours"
       sub="Signals appear as the pipeline scrapes GitHub, HN, and Product Hunt" />
   );
 
@@ -530,7 +525,7 @@ function FounderDetail({ founder, onStatusChange, onNotesChange }) {
 
   if (!founder) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8 }}>
-      <div style={{ fontSize: 32 }}>🎯</div>
+      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.accentLight, border: `1px solid ${C.accentBorder}` }} />
       <div style={{ fontSize: 14, color: C.textMuted }}>Select a founder to inspect</div>
     </div>
   );
@@ -669,7 +664,7 @@ function FounderDetail({ founder, onStatusChange, onNotesChange }) {
         <button style={{
           padding: "12px 16px", borderRadius: 10, border: `1px solid ${C.border}`,
           background: C.surface, color: C.textSub, fontSize: 13, cursor: "pointer",
-        }}>★ Save</button>
+        }}>Save</button>
       </div>
     </div>
   );
@@ -751,7 +746,7 @@ function ScoutingView() {
         {/* Toolbar */}
         <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 8 }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="🔍  Search founders, companies…"
+            placeholder="Search founders, companies…"
             style={{
               width: "100%", boxSizing: "border-box", padding: "8px 12px",
               border: `1px solid ${C.border}`, borderRadius: 8,
