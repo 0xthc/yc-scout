@@ -23,6 +23,7 @@ from backend.db import (
     save_stats,
     upsert_founder,
 )
+from backend.incubators import detect_incubator, format_incubator
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,10 @@ def scrape_github(conn, search_queries=None, num_days=90):
     """
     if search_queries is None:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=num_days)).strftime("%Y-%m-%d")
+        # Early-stage cutoff: repos created in the last 30 days (month 1 projects)
+        early_cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
         search_queries = [
+            # Established repos with traction (90-day window)
             f"stars:>100 pushed:>{cutoff} topic:api",
             f"stars:>100 pushed:>{cutoff} topic:saas",
             f"stars:>100 pushed:>{cutoff} topic:ai",
@@ -114,6 +118,20 @@ def scrape_github(conn, search_queries=None, num_days=90):
             f"stars:>50 pushed:>{cutoff} topic:platform",
             f"stars:>30 pushed:>{cutoff} topic:b2b",
             f"stars:>30 pushed:>{cutoff} topic:marketplace",
+            # Early-stage: repos created in the last 30 days with any traction
+            # (lower star threshold — these are month-1 projects pre-raise)
+            f"stars:>10 created:>{early_cutoff} topic:api",
+            f"stars:>10 created:>{early_cutoff} topic:saas",
+            f"stars:>10 created:>{early_cutoff} topic:ai",
+            f"stars:>10 created:>{early_cutoff} topic:devtools",
+            f"stars:>10 created:>{early_cutoff} topic:infrastructure",
+            f"stars:>10 created:>{early_cutoff} topic:fintech",
+            f"stars:>10 created:>{early_cutoff} topic:database",
+            f"stars:>10 created:>{early_cutoff} topic:machine-learning",
+            # Incubator-affiliated repos (any age, any stars)
+            f"stars:>5 pushed:>{cutoff} topic:ycombinator",
+            f"stars:>5 pushed:>{cutoff} topic:yc",
+            f"stars:>5 pushed:>{cutoff} topic:500startups",
         ]
 
     seen_users = set()
@@ -139,12 +157,15 @@ def scrape_github(conn, search_queries=None, num_days=90):
                 logger.warning("Failed to fetch GitHub user: %s", username)
                 continue
 
-            # Upsert founder
+            # Upsert founder — detect incubator from bio
             handle = f"@{username}"
             name = profile.get("name") or username
             bio = profile.get("bio") or ""
             location = profile.get("location") or ""
             followers = profile.get("followers", 0)
+
+            inc_name, inc_batch = detect_incubator(bio)
+            incubator_str = format_incubator(inc_name, inc_batch)
 
             fid = upsert_founder(
                 conn,
@@ -152,6 +173,7 @@ def scrape_github(conn, search_queries=None, num_days=90):
                 handle=handle,
                 bio=bio[:500],
                 location=location,
+                **({"incubator": incubator_str} if incubator_str else {}),
             )
             add_source(
                 conn, fid, "github",
@@ -217,11 +239,36 @@ def scrape_github(conn, search_queries=None, num_days=90):
                     strong=False,
                 )
 
-            # Infer tags from repo topics
+            # Infer tags from repo topics + detect incubator from topics
             tags = set()
             for r in user_repos[:10]:
                 for topic in r.get("topics", []):
                     tags.add(topic)
+                # Check repo description for incubator mentions
+                if not incubator_str:
+                    desc = r.get("description") or ""
+                    inc_name, inc_batch = detect_incubator(desc)
+                    incubator_str = format_incubator(inc_name, inc_batch)
+
+            # Check topics for incubator affiliation
+            if not incubator_str:
+                incubator_topics = {
+                    "ycombinator": "YC", "yc": "YC", "y-combinator": "YC",
+                    "500startups": "500 Global", "500-startups": "500 Global",
+                    "plugandplay": "Plug and Play", "plug-and-play": "Plug and Play",
+                }
+                for topic in tags:
+                    if topic.lower() in incubator_topics:
+                        incubator_str = incubator_topics[topic.lower()]
+                        break
+
+            if incubator_str:
+                conn.execute(
+                    "UPDATE founders SET incubator = ? WHERE id = ? AND (incubator IS NULL OR incubator = '')",
+                    (incubator_str, fid),
+                )
+                tags.add(incubator_str.lower().replace(" ", "-"))
+
             if tags:
                 add_tags(conn, fid, list(tags)[:10])
 

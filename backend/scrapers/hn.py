@@ -23,6 +23,7 @@ from backend.db import (
     save_stats,
     upsert_founder,
 )
+from backend.incubators import detect_incubator, detect_incubator_from_signals, format_incubator
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +102,22 @@ def scrape_hn(conn, search_terms=None, num_days=90):
             "database", "security", "analytics", "ML",
         ]
 
+    # Also search for "Launch YC" and incubator-related posts (story tag, not just show_hn)
+    incubator_queries = [
+        ("Launch YC", "story"),
+        ("YC W25", "story"),
+        ("YC S25", "story"),
+        ("YC W26", "story"),
+        ("YC S26", "story"),
+        ("500 Startups", "story"),
+        ("500 Global", "story"),
+        ("Plug and Play", "story"),
+    ]
+
     seen_users = set()
     processed = 0
 
+    # Phase A: Show HN posts with startup search terms
     for term in search_terms:
         try:
             hits = _algolia_search(term, num_days=num_days)
@@ -128,13 +142,17 @@ def scrape_hn(conn, search_terms=None, num_days=90):
             karma = user_data.get("karma", 0)
             about = user_data.get("about", "") or ""
 
-            # Upsert founder
+            # Upsert founder — detect incubator from bio
             handle = f"@{author}"
+            inc_name, inc_batch = detect_incubator(about)
+            incubator_str = format_incubator(inc_name, inc_batch)
+
             fid = upsert_founder(
                 conn,
                 name=author,
                 handle=handle,
                 bio=about[:500],
+                **({"incubator": incubator_str} if incubator_str else {}),
             )
             add_source(
                 conn, fid, "hn",
@@ -150,18 +168,19 @@ def scrape_hn(conn, search_terms=None, num_days=90):
 
             hn_top_score = 0
             hn_submissions = len(user_posts)
+            collected_signals = []
 
             for post in user_posts:
                 points = post.get("points", 0) or 0
                 title = post.get("title", "")
                 hn_top_score = max(hn_top_score, points)
                 post_url = f"https://news.ycombinator.com/item?id={post.get('objectID', '')}"
-                created = post.get("created_at", "")
 
                 if points >= SHOW_HN_MIN_POINTS:
                     is_show = title.lower().startswith("show hn")
                     is_ask = title.lower().startswith("ask hn")
-                    prefix = "Show HN" if is_show else "Ask HN" if is_ask else "HN"
+                    is_launch = title.lower().startswith("launch")
+                    prefix = "Show HN" if is_show else "Ask HN" if is_ask else "Launch" if is_launch else "HN"
                     strong = points >= STRONG_SIGNAL_POINTS
 
                     label = f"{prefix}: {title.split(':', 1)[-1].strip() if ':' in title else title} — {points} pts"
@@ -169,6 +188,21 @@ def scrape_hn(conn, search_terms=None, num_days=90):
                         conn, fid, "hn", label,
                         url=post_url, strong=strong,
                     )
+                    collected_signals.append({"label": label, "source": "hn", "strong": strong})
+
+            # Check signals for incubator mentions if not detected from bio
+            if not incubator_str:
+                inc_name, inc_batch = detect_incubator_from_signals(collected_signals)
+                incubator_str = format_incubator(inc_name, inc_batch)
+                if incubator_str:
+                    conn.execute(
+                        "UPDATE founders SET incubator = ? WHERE id = ? AND (incubator IS NULL OR incubator = '')",
+                        (incubator_str, fid),
+                    )
+
+            # Tag incubator
+            if incubator_str:
+                add_tags(conn, fid, [incubator_str.lower().replace(" ", "-")])
 
             # Save stats snapshot
             save_stats(
@@ -180,6 +214,66 @@ def scrape_hn(conn, search_terms=None, num_days=90):
 
             processed += 1
             time.sleep(0.2)  # Rate limiting
+
+    # Phase B: Incubator-specific searches (story tag, broader reach)
+    for query, tag in incubator_queries:
+        try:
+            hits = _algolia_search(query, tags=tag, num_days=num_days)
+        except httpx.HTTPError as e:
+            logger.warning("Algolia incubator search failed for '%s': %s", query, e)
+            continue
+
+        for hit in hits:
+            author = hit.get("author")
+            if not author or author in seen_users:
+                continue
+            seen_users.add(author)
+
+            try:
+                user_data = _firebase_user(author)
+                if not user_data:
+                    continue
+            except httpx.HTTPError:
+                continue
+
+            karma = user_data.get("karma", 0)
+            about = user_data.get("about", "") or ""
+            title = hit.get("title", "")
+
+            # Detect incubator from the post title or bio
+            inc_name, inc_batch = detect_incubator(title)
+            if not inc_name:
+                inc_name, inc_batch = detect_incubator(about)
+            if not inc_name:
+                # Infer from the query itself
+                if "yc" in query.lower():
+                    inc_name = "YC"
+                elif "500" in query:
+                    inc_name = "500 Global"
+                elif "plug" in query.lower():
+                    inc_name = "Plug and Play"
+            incubator_str = format_incubator(inc_name, inc_batch)
+
+            handle = f"@{author}"
+            fid = upsert_founder(
+                conn, name=author, handle=handle, bio=about[:500],
+                **({"incubator": incubator_str} if incubator_str else {}),
+            )
+            add_source(conn, fid, "hn", source_id=author,
+                       profile_url=f"https://news.ycombinator.com/user?id={author}")
+
+            points = hit.get("points", 0) or 0
+            post_url = f"https://news.ycombinator.com/item?id={hit.get('objectID', '')}"
+            if points >= 10:  # Lower threshold for incubator posts
+                label = f"Launch: {title.split(':', 1)[-1].strip() if ':' in title else title} — {points} pts"
+                add_signal(conn, fid, "hn", label, url=post_url, strong=points >= 100)
+
+            if incubator_str:
+                add_tags(conn, fid, [incubator_str.lower().replace(" ", "-")])
+
+            save_stats(conn, fid, hn_karma=karma, hn_submissions=1, hn_top_score=points)
+            processed += 1
+            time.sleep(0.2)
 
     logger.info("HN scraper processed %d founders", processed)
     return processed
