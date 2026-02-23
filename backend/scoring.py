@@ -122,15 +122,15 @@ def score_founder_quality(stats, founder_info, signals):
     has_biz = any(kw in bio for kw in biz_kw)
     complementarity = 100 if (has_tech and has_biz) else 60 if has_tech else 40 if has_biz else 20
 
-    # Incubator affiliation: being accepted to a top accelerator is a
-    # strong external validation of founder quality
-    # YC is the strongest signal, 500 and PnP are solid
+    # Incubator affiliation: external validation of founder quality.
+    # YC (~2% acceptance) is the strongest signal. 500 Global (~5%) is
+    # solid. PnP runs 100+ per batch with broader admission — weaker signal.
     if "yc" in incubator:
-        incubator_boost = 30  # YC acceptance = major quality signal
+        incubator_boost = 20  # YC acceptance = strong quality signal
     elif "500" in incubator:
-        incubator_boost = 20
+        incubator_boost = 12
     elif "plug" in incubator:
-        incubator_boost = 18
+        incubator_boost = 5   # PnP: less selective, weaker quality signal
     else:
         incubator_boost = 0
 
@@ -300,7 +300,8 @@ def score_deal_availability(stats, founder_info, signals):
       - Low VC engagement (not yet swarmed by investors)
       - No press coverage (first press = deal window closing)
       - Early stage indicators (pre-seed > seed > series A)
-      - Incubator batch timing (current batch = raise imminent, act NOW)
+      - Incubator batch = deal is harder to get (oversubscribed rounds,
+        100+ investors competing at Demo Day, aggressive pricing)
     """
     stage = (founder_info.get("stage") or "").lower()
     followers = stats.get("followers", 0)
@@ -352,16 +353,18 @@ def score_deal_availability(stats, founder_info, signals):
         + exposure_score * 0.20
     )
 
-    # Incubator batch timing bonus: founders in a current batch are about
-    # to raise at Demo Day (typically ~8 weeks out). This is *the* window
-    # to get in early before the round fills up.
-    # YC gets a bigger bonus because Demo Day timing is more predictable.
+    # Incubator batch penalty: accelerator founders raise at Demo Day
+    # with 100+ investors competing for allocation. The deal is *less*
+    # available — rounds oversubscribe fast and pricing is aggressive.
+    # No accelerator = under the radar = better deal availability.
     if incubator:
         if "yc" in incubator:
-            batch_bonus = 15  # YC Demo Day = precise fundraise window
+            batch_penalty = 25  # YC Demo Day = most competitive fundraise
+        elif "500" in incubator:
+            batch_penalty = 12
         else:
-            batch_bonus = 10  # Other accelerators = still a good timing signal
-        return min(base + batch_bonus, 100)
+            batch_penalty = 8
+        return max(base - batch_penalty, 0)
 
     return base
 
