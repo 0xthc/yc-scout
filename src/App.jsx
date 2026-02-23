@@ -1,384 +1,675 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+const API = import.meta.env.VITE_API_URL || "";
 
-const SOURCE_COLORS = {
-  github: { bg: "#1a1a2e", accent: "#58a6ff", label: "GH" },
-  hn: { bg: "#2d1a00", accent: "#ff6600", label: "HN" },
-  producthunt: { bg: "#2d1117", accent: "#da552f", label: "PH" },
+// ── Design tokens ─────────────────────────────────────────────
+const C = {
+  bg: "#f8fafc",
+  surface: "#ffffff",
+  border: "#e2e8ef",
+  borderLight: "#f1f5f9",
+  text: "#0f172a",
+  textSub: "#64748b",
+  textMuted: "#94a3b8",
+  accent: "#4f46e5",
+  accentLight: "#eef2ff",
+  accentBorder: "#c7d2fe",
+  green: "#059669",
+  greenLight: "#ecfdf5",
+  amber: "#d97706",
+  amberLight: "#fffbeb",
+  red: "#dc2626",
+  redLight: "#fef2f2",
+  blue: "#2563eb",
+  blueLight: "#eff6ff",
+  shadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+  shadowMd: "0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.04)",
 };
 
-const STATUS_CONFIG = {
-  to_contact: { label: "To Contact", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
-  watching: { label: "Watching", color: "#60a5fa", bg: "rgba(96,165,250,0.12)" },
-  contacted: { label: "Contacted", color: "#34d399", bg: "rgba(52,211,153,0.12)" },
-  pass: { label: "Pass", color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
+const SOURCE = {
+  github: { color: "#1d4ed8", bg: "#eff6ff", label: "GH" },
+  hn: { color: "#b45309", bg: "#fffbeb", label: "HN" },
+  producthunt: { color: "#b91c1c", bg: "#fef2f2", label: "PH" },
 };
 
-const SCORE_LABEL = (s) => s >= 90 ? "STRONG" : s >= 80 ? "GOOD" : s >= 70 ? "MONITOR" : "WEAK";
-const SCORE_COLOR = (s) => s >= 90 ? "#34d399" : s >= 80 ? "#f59e0b" : s >= 70 ? "#60a5fa" : "#6b7280";
-
-// Dimension display config
-const DIMENSIONS = {
-  founder_quality: { label: "Founder Quality", short: "Quality", desc: "Who is this person?" },
-  execution_velocity: { label: "Execution Velocity", short: "Execution", desc: "Are they actually building?" },
-  market_conviction: { label: "Market Conviction", short: "Conviction", desc: "Real obsession with a problem?" },
-  early_traction: { label: "Early Traction", short: "Traction", desc: "Is anyone actually caring?" },
-  deal_availability: { label: "Deal Availability", short: "Availability", desc: "Are you still early enough?" },
+const STATUS = {
+  to_contact: { label: "To Contact", color: C.amber, bg: C.amberLight, border: "#fde68a" },
+  watching: { label: "Watching", color: C.blue, bg: C.blueLight, border: "#bfdbfe" },
+  contacted: { label: "Contacted", color: C.green, bg: C.greenLight, border: "#a7f3d0" },
+  pass: { label: "Pass", color: C.textMuted, bg: C.bg, border: C.border },
 };
 
-const DEFAULT_WEIGHTS = {
-  founder_quality: 0.30,
-  execution_velocity: 0.25,
-  market_conviction: 0.15,
-  early_traction: 0.20,
-  deal_availability: 0.10,
+const scoreColor = (s) => s >= 85 ? C.green : s >= 70 ? C.amber : s >= 50 ? C.blue : C.textMuted;
+const scoreLabel = (s) => s >= 85 ? "Strong" : s >= 70 ? "Good" : s >= 50 ? "Monitor" : "Weak";
+
+const DIMS = {
+  founder_quality: "Founder Quality",
+  execution_velocity: "Execution",
+  market_conviction: "Conviction",
+  early_traction: "Traction",
+  deal_availability: "Availability",
 };
 
-function computeComposite(breakdown, weights) {
-  let total = 0;
-  let weightSum = 0;
-  for (const [dim, w] of Object.entries(weights)) {
-    total += (breakdown[dim] || 0) * w;
-    weightSum += w;
-  }
-  return weightSum > 0 ? Math.round(total / weightSum * (weightSum)) : 0;
-}
+// ── Shared primitives ─────────────────────────────────────────
 
-function reweightFounders(founders, weights) {
-  return founders.map(f => ({
-    ...f,
-    score: computeComposite(f.scoreBreakdown, weights),
-  }));
-}
-
-function ScoreRing({ score, size = 52 }) {
-  const r = (size / 2) - 5;
-  const circ = 2 * Math.PI * r;
-  const fill = (score / 100) * circ;
-  const color = SCORE_COLOR(score);
-  return (
-    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e1e2e" strokeWidth="4" />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="4"
-        strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"
-        style={{ transition: "stroke-dasharray 0.8s cubic-bezier(0.4,0,0.2,1)" }} />
-      <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="central"
-        style={{
-          transform: "rotate(90deg)", transformOrigin: `${size / 2}px ${size / 2}px`,
-          fill: color, fontSize: size < 40 ? "10px" : "13px", fontWeight: 700, fontFamily: "'DM Mono', monospace"
-        }}>
-        {score}
-      </text>
-    </svg>
-  );
-}
-
-function ScoreBar({ label, value, desc, evidence }) {
-  const color = SCORE_COLOR(value);
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, alignItems: "baseline" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-          <span style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "DM Mono, monospace" }}>{label}</span>
-          {desc && <span style={{ fontSize: 9, color: "#3d3d5c", fontStyle: "italic" }}>{desc}</span>}
-        </div>
-        <span style={{ fontSize: 10, color, fontFamily: "DM Mono, monospace", fontWeight: 700 }}>{value}</span>
-      </div>
-      <div style={{ height: 3, background: "#1e1e2e", borderRadius: 2, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 2, transition: "width 0.6s ease" }} />
-      </div>
-      {evidence && evidence.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5 }}>
-          {evidence.map((ev, i) => (
-            <span key={i} style={{
-              fontSize: 9, color: ev.highlight ? "#e2e8f0" : "#4b5563", fontFamily: "DM Mono, monospace",
-              padding: "2px 6px", background: ev.highlight ? "rgba(124,58,237,0.12)" : "#0a0a14",
-              border: `1px solid ${ev.highlight ? "#7c3aed33" : "#13131f"}`, borderRadius: 3,
-            }}>{ev.label}</span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function getDimensionEvidence(dim, founder) {
-  switch (dim) {
-    case "founder_quality":
-      return [
-        founder.github_repos > 0 && { label: `${founder.github_repos} repos`, highlight: founder.github_repos >= 8 },
-        founder.github_stars > 0 && { label: `${founder.github_stars.toLocaleString()} stars`, highlight: founder.github_stars >= 1000 },
-        founder.yc_alumni_connections > 0 && { label: `${founder.yc_alumni_connections} YC connections`, highlight: founder.yc_alumni_connections >= 3 },
-        founder.hn_karma > 0 && { label: `${founder.hn_karma.toLocaleString()} HN karma`, highlight: founder.hn_karma >= 3000 },
-      ].filter(Boolean);
-    case "execution_velocity":
-      return [
-        founder.github_commits_90d > 0 && { label: `${founder.github_commits_90d} commits/90d`, highlight: founder.github_commits_90d >= 200 },
-        founder.github_repos > 0 && { label: `${founder.github_repos} repos`, highlight: founder.github_repos >= 6 },
-        founder.signals && { label: `${founder.signals.length} signals`, highlight: founder.signals.length >= 3 },
-        founder.signals && { label: `${founder.signals.filter(s => s.strong).length} strong`, highlight: founder.signals.filter(s => s.strong).length >= 2 },
-      ].filter(Boolean);
-    case "market_conviction":
-      return [
-        founder.domain && { label: founder.domain, highlight: true },
-        ...(founder.tags || []).slice(0, 4).map(t => ({ label: `#${t}`, highlight: false })),
-        founder.hn_submissions > 0 && { label: `${founder.hn_submissions} HN posts`, highlight: founder.hn_submissions >= 5 },
-      ].filter(Boolean);
-    case "early_traction":
-      return [
-        founder.github_stars > 0 && { label: `${founder.github_stars.toLocaleString()} GH stars`, highlight: founder.github_stars >= 500 },
-        founder.hn_top_score > 0 && { label: `HN top: ${founder.hn_top_score} pts`, highlight: founder.hn_top_score >= 300 },
-        founder.ph_upvotes > 0 && { label: `${founder.ph_upvotes} PH upvotes`, highlight: founder.ph_upvotes >= 500 },
-        founder.ph_launches > 0 && { label: `${founder.ph_launches} PH launches`, highlight: founder.ph_launches >= 1 },
-        founder.followers > 0 && { label: `${(founder.followers / 1000).toFixed(1)}k followers`, highlight: founder.followers >= 10000 },
-      ].filter(Boolean);
-    case "deal_availability":
-      return [
-        founder.stage && { label: founder.stage, highlight: ["Pre-seed", "Bootstrapped"].includes(founder.stage) },
-        founder.founded && { label: `Founded ${founder.founded}`, highlight: false },
-        founder.status && { label: STATUS_CONFIG[founder.status]?.label || founder.status, highlight: founder.status === "to_contact" },
-      ].filter(Boolean);
-    default:
-      return [];
-  }
-}
-
-function WeightSlider({ dim, weight, onChange }) {
-  const cfg = DIMENSIONS[dim];
-  const pct = Math.round(weight * 100);
-  return (
-    <div style={{ marginBottom: 6 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-        <span style={{ fontSize: 9, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "DM Mono, monospace" }}>{cfg.short}</span>
-        <span style={{ fontSize: 9, color: "#7c3aed", fontFamily: "DM Mono, monospace", fontWeight: 700 }}>{pct}%</span>
-      </div>
-      <input
-        type="range" min="0" max="100" value={pct}
-        onChange={e => onChange(dim, parseInt(e.target.value) / 100)}
-        style={{
-          width: "100%", height: 3, appearance: "none", background: "#1e1e2e",
-          borderRadius: 2, outline: "none", cursor: "pointer",
-          accentColor: "#7c3aed",
-        }}
-      />
-    </div>
-  );
-}
-
-function WeightsPanel({ weights, onChange, onReset }) {
-  const isDefault = Object.entries(DEFAULT_WEIGHTS).every(
-    ([k, v]) => Math.abs((weights[k] || 0) - v) < 0.005
-  );
-  return (
-    <div style={{
-      background: "#08080f", border: "1px solid #13131f", borderRadius: 8,
-      padding: "14px 16px", marginBottom: 16,
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "DM Mono, monospace" }}>
-          Weight Tuning
-        </div>
-        {!isDefault && (
-          <button onClick={onReset} style={{
-            fontSize: 9, color: "#7c3aed", background: "none", border: "1px solid #7c3aed33",
-            borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontFamily: "DM Mono, monospace",
-          }}>RESET</button>
-        )}
-      </div>
-      {Object.keys(DIMENSIONS).map(dim => (
-        <WeightSlider key={dim} dim={dim} weight={weights[dim] || 0} onChange={onChange} />
-      ))}
-      <div style={{ fontSize: 9, color: "#3d3d5c", fontFamily: "DM Mono, monospace", marginTop: 8, textAlign: "center" }}>
-        Composite scores recalculate live
-      </div>
-    </div>
-  );
-}
-
-function SourceBadge({ source }) {
-  const cfg = SOURCE_COLORS[source];
+function Badge({ children, color = C.accent, bg = C.accentLight, border = C.accentBorder }) {
   return (
     <span style={{
-      fontSize: 9, fontWeight: 700, fontFamily: "DM Mono, monospace", letterSpacing: "0.1em",
-      padding: "2px 6px", borderRadius: 3, background: cfg.bg, color: cfg.accent,
-      border: `1px solid ${cfg.accent}22`
-    }}>{cfg.label}</span>
+      display: "inline-flex", alignItems: "center", padding: "2px 8px",
+      borderRadius: 99, fontSize: 11, fontWeight: 600, lineHeight: 1.6,
+      color, background: bg, border: `1px solid ${border}`,
+    }}>{children}</span>
   );
 }
 
-function SignalDot({ type }) {
-  const cfg = SOURCE_COLORS[type];
-  return <span style={{ width: 7, height: 7, borderRadius: "50%", background: cfg.accent, display: "inline-block", flexShrink: 0, marginTop: 4 }} />;
-}
-
-function Avatar({ initials, score }) {
-  const color = SCORE_COLOR(score);
+function ScorePill({ score, size = "md" }) {
+  const color = scoreColor(score);
+  const pad = size === "sm" ? "2px 8px" : "3px 10px";
+  const fs = size === "sm" ? 11 : 13;
   return (
-    <div style={{
-      width: 42, height: 42, borderRadius: "50%", background: `${color}18`,
-      border: `1.5px solid ${color}44`, display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 13, fontWeight: 700, color, fontFamily: "DM Mono, monospace", flexShrink: 0
-    }}>{initials}</div>
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: pad, borderRadius: 99, fontSize: fs, fontWeight: 700,
+      color, background: `${color}12`, border: `1px solid ${color}30`,
+      fontFamily: "ui-monospace, monospace",
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
+      {score}
+    </span>
   );
 }
 
-function StatusBadge({ status, onClick }) {
-  const cfg = STATUS_CONFIG[status];
+function ScoreBar({ label, value }) {
+  const color = scoreColor(value);
   return (
-    <button onClick={onClick} style={{
-      fontSize: 10, fontWeight: 600, fontFamily: "DM Mono, monospace", letterSpacing: "0.08em",
-      padding: "3px 8px", borderRadius: 4, background: cfg.bg, color: cfg.color,
-      border: `1px solid ${cfg.color}33`, cursor: "pointer", transition: "all 0.2s"
-    }}>{cfg.label}</button>
-  );
-}
-
-function FounderCard({ founder, onClick, selected }) {
-  return (
-    <div onClick={() => onClick(founder)} style={{
-      padding: "14px 16px", borderBottom: "1px solid #13131f",
-      background: selected ? "#0f0f1a" : "transparent",
-      borderLeft: selected ? "2px solid #7c3aed" : "2px solid transparent",
-      cursor: "pointer", transition: "all 0.15s",
-    }}
-      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "#0a0a14"; }}
-      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <Avatar initials={founder.avatar} score={founder.score} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0", fontFamily: "Syne, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{founder.company || founder.name}</span>
-              {founder.stage && <span style={{ fontSize: 9, color: "#7c3aed", fontFamily: "DM Mono, monospace", padding: "1px 5px", background: "rgba(124,58,237,0.1)", borderRadius: 3, flexShrink: 0 }}>{founder.stage}</span>}
-            </div>
-            <ScoreRing score={founder.score} size={36} />
-          </div>
-          <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "DM Mono, monospace", marginBottom: 4 }}>
-            {founder.name} {founder.handle && <span style={{ color: "#4b5563" }}>{founder.handle}</span>}
-          </div>
-          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6, lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{founder.bio}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            {founder.sources.map(s => <SourceBadge key={s} source={s} />)}
-            <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace" }}>·</span>
-            <span style={{ fontSize: 10, color: "#7c3aed", fontFamily: "DM Mono, monospace" }}>{founder.domain}</span>
-            <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace" }}>·</span>
-            <span style={{ fontSize: 10, color: "#4b5563" }}>{founder.location}</span>
-          </div>
-        </div>
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+        <span style={{ fontSize: 12, color: C.textSub }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color, fontFamily: "ui-monospace, monospace" }}>{value}</span>
+      </div>
+      <div style={{ height: 4, background: C.borderLight, borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 4, transition: "width 0.5s ease" }} />
       </div>
     </div>
   );
 }
 
-function DetailPanel({ founder, onStatusChange, weights, onWeightChange, onWeightReset }) {
-  if (!founder) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#2d2d44", fontSize: 13, fontFamily: "DM Mono, monospace" }}>
-      &larr; SELECT A FOUNDER TO INSPECT
+function Card({ children, style = {} }) {
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`,
+      borderRadius: 12, boxShadow: C.shadow, ...style
+    }}>{children}</div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 600, letterSpacing: "0.06em",
+      textTransform: "uppercase", color: C.textMuted, marginBottom: 12,
+    }}>{children}</div>
+  );
+}
+
+function EmptyState({ icon, title, sub }) {
+  return (
+    <div style={{ padding: 60, textAlign: "center" }}>
+      <div style={{ fontSize: 36, marginBottom: 12 }}>{icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 13, color: C.textMuted }}>{sub}</div>
     </div>
   );
+}
 
-  const statuses = Object.keys(STATUS_CONFIG);
-  const nextStatus = statuses[(statuses.indexOf(founder.status) + 1) % statuses.length];
+// ── Nav ───────────────────────────────────────────────────────
+
+const VIEWS = ["themes", "emergence", "pulse", "scouting"];
+const VIEW_LABELS = { themes: "Themes", emergence: "Emergence", pulse: "Pulse", scouting: "Scouting" };
+const VIEW_ICONS = { themes: "🧩", emergence: "⚡", pulse: "📡", scouting: "🎯" };
+
+function TopNav({ view, setView, stats }) {
+  return (
+    <header style={{
+      background: C.surface, borderBottom: `1px solid ${C.border}`,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "0 24px", height: 56, flexShrink: 0,
+    }}>
+      {/* Logo */}
+      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8,
+            background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 14,
+          }}>🔭</div>
+          <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: "-0.02em" }}>Scout</span>
+          <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 500 }}>· VC Intelligence</span>
+        </div>
+
+        {/* Nav tabs */}
+        <nav style={{ display: "flex", gap: 2 }}>
+          {VIEWS.map(v => (
+            <button key={v} onClick={() => setView(v)} style={{
+              padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+              border: "none", cursor: "pointer", transition: "all 0.15s",
+              background: view === v ? C.accentLight : "transparent",
+              color: view === v ? C.accent : C.textSub,
+            }}>
+              {VIEW_ICONS[v]} {VIEW_LABELS[v]}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Stats pills */}
+      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        {[
+          { label: "Tracked", val: stats.total },
+          { label: "Strong Signal", val: stats.strong, color: C.green },
+          { label: "To Contact", val: stats.toContact, color: C.amber },
+        ].map(({ label, val, color }) => (
+          <div key={label} style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: color || C.text, fontFamily: "ui-monospace, monospace" }}>{val}</div>
+            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </header>
+  );
+}
+
+// ── THEMES VIEW ───────────────────────────────────────────────
+
+function ThemeCard({ theme, onClick }) {
+  const vel = theme.weeklyVelocity || 0;
+  const velPct = (vel * 100).toFixed(0);
+  const velColor = vel > 0 ? C.green : vel < 0 ? C.red : C.textMuted;
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "24px 24px" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 24, paddingBottom: 20, borderBottom: "1px solid #13131f" }}>
-        <Avatar initials={founder.avatar} score={founder.score} />
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#e2e8f0", fontFamily: "Syne, sans-serif" }}>{founder.company || founder.name}</h2>
-            {founder.stage && <span style={{ fontSize: 10, color: "#7c3aed", fontFamily: "DM Mono, monospace", padding: "2px 7px", background: "rgba(124,58,237,0.1)", borderRadius: 4 }}>{founder.stage}</span>}
-            <StatusBadge status={founder.status} onClick={() => onStatusChange(founder.id, nextStatus)} />
-          </div>
-          <div style={{ fontSize: 12, color: "#9ca3af", fontFamily: "DM Mono, monospace", marginBottom: 4 }}>{founder.name} <span style={{ color: "#4b5563" }}>{founder.handle}</span></div>
-          <div style={{ fontSize: 11, color: "#4b5563", fontFamily: "DM Mono, monospace", marginBottom: 6 }}>{founder.domain} · {founder.location}</div>
-          <p style={{ margin: 0, fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>{founder.bio}</p>
+    <Card style={{ padding: 20, cursor: "pointer", transition: "box-shadow 0.15s" }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = C.shadowMd}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = C.shadow}
+      onClick={() => onClick(theme)}>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+        <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: C.text }}>{theme.name}</h3>
+          <div style={{ fontSize: 12, color: C.textMuted }}>First detected {new Date(theme.firstDetected).toLocaleDateString()}</div>
         </div>
-        <div style={{ textAlign: "center" }}>
-          <ScoreRing score={founder.score} size={60} />
-          <div style={{ fontSize: 9, color: SCORE_COLOR(founder.score), fontFamily: "DM Mono, monospace", fontWeight: 700, marginTop: 3, letterSpacing: "0.1em" }}>{SCORE_LABEL(founder.score)}</div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 28, fontWeight: 800, color: scoreColor(theme.emergenceScore), fontFamily: "ui-monospace, monospace", lineHeight: 1 }}>{theme.emergenceScore}</div>
+          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, marginTop: 2 }}>Emergence</div>
         </div>
       </div>
 
       {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 20 }}>
-        {[
-          { label: "GH Stars", value: founder.github_stars.toLocaleString(), accent: "#58a6ff" },
-          { label: "Commits/90d", value: (founder.github_commits_90d || 0).toLocaleString(), accent: "#58a6ff" },
-          { label: "HN Karma", value: founder.hn_karma.toLocaleString(), accent: "#ff6600" },
-          { label: "HN Top", value: (founder.hn_top_score || 0).toLocaleString() + " pts", accent: "#ff6600" },
-          { label: "PH Upvotes", value: (founder.ph_upvotes || 0).toLocaleString(), accent: "#da552f" },
-          { label: "Followers", value: founder.followers >= 1000 ? (founder.followers / 1000).toFixed(1) + "k" : founder.followers.toString(), accent: "#7c3aed" },
-        ].map(({ label, value, accent }) => (
-          <div key={label} style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "8px 10px" }}>
-            <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 3 }}>{label}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: accent, fontFamily: "DM Mono, monospace" }}>{value}</div>
+      <div style={{ display: "flex", gap: 16, marginBottom: 14, padding: "10px 0", borderTop: `1px solid ${C.borderLight}`, borderBottom: `1px solid ${C.borderLight}` }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "ui-monospace, monospace" }}>{theme.builderCount}</div>
+          <div style={{ fontSize: 10, color: C.textMuted }}>Builders</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: velColor, fontFamily: "ui-monospace, monospace" }}>{vel > 0 ? "+" : ""}{velPct}%</div>
+          <div style={{ fontSize: 10, color: C.textMuted }}>WoW growth</div>
+        </div>
+      </div>
+
+      {/* Identity fields */}
+      {theme.painSummary && (
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: C.textSub }}>Pain: </span>
+          <span style={{ fontSize: 12, color: C.textSub }}>{theme.painSummary}</span>
+        </div>
+      )}
+      {theme.founderOrigin && (
+        <div style={{ marginBottom: 10 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: C.textSub }}>Origin: </span>
+          <span style={{ fontSize: 12, color: C.textSub }}>{theme.founderOrigin}</span>
+        </div>
+      )}
+
+      {/* Founder avatars */}
+      {theme.founders?.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {theme.founders.slice(0, 5).map(f => (
+            <div key={f.id} title={f.name} style={{
+              width: 26, height: 26, borderRadius: "50%", fontSize: 10, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: C.accentLight, color: C.accent, border: `1px solid ${C.accentBorder}`,
+            }}>
+              {(f.name || "?")[0].toUpperCase()}
+            </div>
+          ))}
+          {theme.founders.length > 5 && (
+            <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 4 }}>+{theme.founders.length - 5} more</span>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ThemesView() {
+  const [themes, setThemes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API}/api/themes`).then(r => r.json()).then(data => {
+      setThemes(data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>Loading themes…</div>;
+
+  if (themes.length === 0) return (
+    <EmptyState icon="🧩" title="No themes detected yet"
+      sub="Run the pipeline with 20+ founders to detect emerging clusters" />
+  );
+
+  if (selected) return (
+    <div style={{ height: "100%", overflowY: "auto" }}>
+      <div style={{ padding: "20px 24px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={() => setSelected(null)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.textSub, cursor: "pointer", fontSize: 13 }}>← Back</button>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>{selected.name}</h2>
+        <ScorePill score={selected.emergenceScore} />
+        <Badge color={C.green} bg={C.greenLight} border="#a7f3d0">{selected.builderCount} builders</Badge>
+      </div>
+      <div style={{ padding: 24, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+        {selected.founders?.map(f => (
+          <Card key={f.id} style={{ padding: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{f.company || f.name}</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>{f.name} · {f.domain}</div>
+              </div>
+              <ScorePill score={f.score} size="sm" />
+            </div>
+            <p style={{ margin: 0, fontSize: 12, color: C.textSub, lineHeight: 1.5 }}>{f.bio}</p>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: 24, overflowY: "auto", height: "100%" }}>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Emerging Themes</h2>
+        <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Clusters of unrelated founders independently building in the same direction</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
+        {themes.map(t => <ThemeCard key={t.id} theme={t} onClick={setSelected} />)}
+      </div>
+    </div>
+  );
+}
+
+// ── EMERGENCE VIEW ────────────────────────────────────────────
+
+function EmergenceCard({ event }) {
+  const isTheme = event.entityType === "theme";
+  const typeLabels = {
+    new_theme: { label: "New Theme", color: C.accent, bg: C.accentLight },
+    theme_spike: { label: "Theme Spike", color: C.green, bg: C.greenLight },
+    commit_spike: { label: "Commit Spike", color: C.blue, bg: C.blueLight },
+    star_spike: { label: "Star Spike", color: C.amber, bg: C.amberLight },
+    hn_spike: { label: "HN Spike", color: "#b45309", bg: "#fffbeb" },
+  };
+  const cfg = typeLabels[event.eventType] || { label: event.eventType, color: C.textSub, bg: C.bg };
+  const since = Math.round((Date.now() - new Date(event.detectedAt)) / 3600000);
+
+  return (
+    <Card style={{ padding: 16, display: "flex", gap: 14, alignItems: "flex-start" }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10, background: cfg.bg,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 16, flexShrink: 0,
+      }}>
+        {isTheme ? "🧩" : "👤"}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+            {isTheme ? event.themeName : (event.company || event.founderName)}
+          </span>
+          <Badge color={cfg.color} bg={cfg.bg} border={`${cfg.color}30`}>{cfg.label}</Badge>
+          {!isTheme && event.score && <ScorePill score={event.score} size="sm" />}
+        </div>
+        <p style={{ margin: "0 0 6px", fontSize: 13, color: C.textSub, lineHeight: 1.4 }}>{event.signal}</p>
+        {event.deltaBefore != null && event.deltaAfter != null && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <span style={{ color: C.textMuted, fontFamily: "ui-monospace, monospace" }}>{Number(event.deltaBefore).toFixed(0)}</span>
+            <span style={{ color: C.textMuted }}>→</span>
+            <span style={{ color: scoreColor(75), fontWeight: 700, fontFamily: "ui-monospace, monospace" }}>{Number(event.deltaAfter).toFixed(0)}</span>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 11, color: C.textMuted, flexShrink: 0, paddingTop: 2 }}>
+        {since < 1 ? "just now" : `${since}h ago`}
+      </div>
+    </Card>
+  );
+}
+
+function EmergenceView() {
+  const [data, setData] = useState({ newThemes: [], inflectionFounders: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/api/emergence`).then(r => r.json()).then(d => {
+      setData(d);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>Loading…</div>;
+
+  const all = [...(data.newThemes || []), ...(data.inflectionFounders || [])]
+    .sort((a, b) => new Date(b.detectedAt) - new Date(a.detectedAt));
+
+  if (all.length === 0) return (
+    <EmptyState icon="⚡" title="No emergence events yet"
+      sub="Events appear when founders cross velocity thresholds or new theme clusters are detected" />
+  );
+
+  return (
+    <div style={{ padding: 24, overflowY: "auto", height: "100%" }}>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Emergence</h2>
+        <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>What just crossed a threshold that wasn't on your radar yesterday</p>
+      </div>
+      <div style={{ display: "grid", gap: 10, maxWidth: 760 }}>
+        {data.newThemes?.length > 0 && (
+          <>
+            <SectionTitle>New Theme Clusters ({data.newThemes.length})</SectionTitle>
+            {data.newThemes.map(e => <EmergenceCard key={e.id} event={{ ...e, entityType: "theme" }} />)}
+          </>
+        )}
+        {data.inflectionFounders?.length > 0 && (
+          <>
+            <SectionTitle style={{ marginTop: 20 }}>Inflection Founders ({data.inflectionFounders.length})</SectionTitle>
+            {data.inflectionFounders.map(e => <EmergenceCard key={e.id} event={e} />)}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── PULSE VIEW ────────────────────────────────────────────────
+
+function PulseView() {
+  const [signals, setSignals] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/api/pulse`).then(r => r.json()).then(d => {
+      setSignals(d);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>Loading…</div>;
+
+  if (signals.length === 0) return (
+    <EmptyState icon="📡" title="No signals in the last 48 hours"
+      sub="Signals appear as the pipeline scrapes GitHub, HN, and Product Hunt" />
+  );
+
+  // Group by date
+  const grouped = {};
+  signals.forEach(s => {
+    const d = new Date(s.detectedAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(s);
+  });
+
+  return (
+    <div style={{ padding: 24, overflowY: "auto", height: "100%" }}>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Pulse</h2>
+        <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Raw signal feed — last 48 hours across all themes and founders</p>
+      </div>
+      <div style={{ maxWidth: 720 }}>
+        {Object.entries(grouped).map(([date, sigs]) => (
+          <div key={date} style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>{date}</div>
+            <Card>
+              {sigs.map((s, i) => {
+                const src = SOURCE[s.source] || { color: C.textSub, bg: C.bg, label: "?" };
+                const time = new Date(s.detectedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+                return (
+                  <div key={s.id} style={{
+                    display: "flex", gap: 12, padding: "12px 16px",
+                    borderBottom: i < sigs.length - 1 ? `1px solid ${C.borderLight}` : "none",
+                    alignItems: "flex-start",
+                  }}>
+                    <span style={{
+                      flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5,
+                      color: src.color, background: src.bg, border: `1px solid ${src.color}20`,
+                    }}>{src.label}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: C.textSub, marginBottom: 2 }}>
+                        <span style={{ fontWeight: 600, color: C.text }}>{s.company || s.founderName}</span>
+                        {" · "}
+                        <span>{s.founderHandle}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{s.label}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      {s.strong && <Badge color={C.amber} bg={C.amberLight} border="#fde68a">Key</Badge>}
+                      <span style={{ fontSize: 11, color: C.textMuted, fontFamily: "ui-monospace, monospace" }}>{time}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </Card>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
 
-      {/* Score breakdown with evidence */}
-      <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
-        <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "DM Mono, monospace", marginBottom: 12 }}>Score Breakdown</div>
-        {Object.entries(DIMENSIONS).map(([dim, cfg]) => (
-          <ScoreBar key={dim} label={cfg.label} value={founder.scoreBreakdown[dim] || 0} desc={cfg.desc} evidence={getDimensionEvidence(dim, founder)} />
+// ── SCOUTING VIEW ─────────────────────────────────────────────
+
+function FounderRow({ founder, selected, onClick }) {
+  const sc = SOURCE[founder.sources?.[0]] || SOURCE.github;
+  return (
+    <div onClick={() => onClick(founder)} style={{
+      display: "flex", alignItems: "center", gap: 14, padding: "12px 20px",
+      borderBottom: `1px solid ${C.borderLight}`, cursor: "pointer",
+      background: selected ? C.accentLight : "transparent", transition: "background 0.1s",
+    }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = C.bg; }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}>
+
+      <div style={{
+        width: 36, height: 36, borderRadius: "50%", background: `${scoreColor(founder.score)}18`,
+        border: `1.5px solid ${scoreColor(founder.score)}40`, display: "flex",
+        alignItems: "center", justifyContent: "center", fontSize: 13,
+        fontWeight: 700, color: scoreColor(founder.score), flexShrink: 0,
+      }}>
+        {(founder.name || "?")[0].toUpperCase()}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {founder.company || founder.name}
+          </span>
+          {founder.stage && (
+            <span style={{ fontSize: 10, color: C.accent, background: C.accentLight, padding: "1px 6px", borderRadius: 4, flexShrink: 0 }}>
+              {founder.stage}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: C.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {founder.name} · {founder.domain} · {founder.location}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4, color: sc.color, background: sc.bg }}>{sc.label}</span>
+        <ScorePill score={founder.score} size="sm" />
+      </div>
+    </div>
+  );
+}
+
+function FounderDetail({ founder, onStatusChange, onNotesChange }) {
+  const [notes, setNotes] = useState(founder?.notes || "");
+  const [saving, setSaving] = useState(false);
+  const notesRef = useRef(null);
+
+  useEffect(() => { setNotes(founder?.notes || ""); }, [founder?.id]);
+
+  if (!founder) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8 }}>
+      <div style={{ fontSize: 32 }}>🎯</div>
+      <div style={{ fontSize: 14, color: C.textMuted }}>Select a founder to inspect</div>
+    </div>
+  );
+
+  const statusOrder = Object.keys(STATUS);
+  const nextStatus = statusOrder[(statusOrder.indexOf(founder.status) + 1) % statusOrder.length];
+  const stCfg = STATUS[founder.status] || STATUS.to_contact;
+
+  const saveNotes = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API}/api/founders/${founder.id}/notes`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      onNotesChange(founder.id, notes);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ height: "100%", overflowY: "auto", padding: 24 }}>
+      {/* Header */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 12, background: `${scoreColor(founder.score)}15`,
+          border: `2px solid ${scoreColor(founder.score)}30`, display: "flex",
+          alignItems: "center", justifyContent: "center", fontSize: 18,
+          fontWeight: 800, color: scoreColor(founder.score), flexShrink: 0,
+        }}>
+          {(founder.name || "?")[0].toUpperCase()}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>{founder.company || founder.name}</h2>
+            {founder.stage && <Badge>{founder.stage}</Badge>}
+            <button onClick={() => onStatusChange(founder.id, nextStatus)} style={{
+              padding: "3px 10px", borderRadius: 99, fontSize: 11, fontWeight: 600,
+              cursor: "pointer", border: `1px solid ${stCfg.border}`,
+              background: stCfg.bg, color: stCfg.color,
+            }}>{stCfg.label}</button>
+          </div>
+          <div style={{ fontSize: 12, color: C.textMuted }}>{founder.name} · {founder.domain} · {founder.location}</div>
+          <p style={{ margin: "8px 0 0", fontSize: 13, color: C.textSub, lineHeight: 1.5 }}>{founder.bio}</p>
+        </div>
+        <ScorePill score={founder.score} />
+      </div>
+
+      {/* Stats grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
+        {[
+          { label: "GH Stars", val: (founder.github_stars || 0).toLocaleString(), color: SOURCE.github.color },
+          { label: "Commits/90d", val: (founder.github_commits_90d || 0).toLocaleString(), color: SOURCE.github.color },
+          { label: "HN Karma", val: (founder.hn_karma || 0).toLocaleString(), color: SOURCE.hn.color },
+          { label: "HN Top", val: `${founder.hn_top_score || 0} pts`, color: SOURCE.hn.color },
+          { label: "PH Upvotes", val: (founder.ph_upvotes || 0).toLocaleString(), color: SOURCE.producthunt.color },
+          { label: "Followers", val: founder.followers >= 1000 ? `${(founder.followers / 1000).toFixed(1)}k` : String(founder.followers || 0), color: C.accent },
+        ].map(({ label, val, color }) => (
+          <Card key={label} style={{ padding: "10px 14px" }}>
+            <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 3 }}>{label}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "ui-monospace, monospace" }}>{val}</div>
+          </Card>
         ))}
       </div>
 
-      {/* Weight tuning */}
-      <WeightsPanel weights={weights} onChange={onWeightChange} onReset={onWeightReset} />
+      {/* Score breakdown */}
+      <Card style={{ padding: 16, marginBottom: 16 }}>
+        <SectionTitle>Score Breakdown</SectionTitle>
+        {Object.entries(DIMS).map(([dim, label]) => (
+          <ScoreBar key={dim} label={label} value={founder.scoreBreakdown?.[dim] || 0} />
+        ))}
+      </Card>
+
+      {/* Notes */}
+      <Card style={{ padding: 16, marginBottom: 16 }}>
+        <SectionTitle>Private Notes</SectionTitle>
+        <textarea
+          ref={notesRef}
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Add notes about this founder…"
+          rows={4}
+          style={{
+            width: "100%", boxSizing: "border-box", resize: "vertical",
+            border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px",
+            fontSize: 13, color: C.text, background: C.bg, fontFamily: "inherit",
+            outline: "none", lineHeight: 1.5,
+          }}
+        />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <button onClick={saveNotes} disabled={saving} style={{
+            padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+            cursor: saving ? "default" : "pointer", border: "none",
+            background: C.accent, color: "#fff", opacity: saving ? 0.7 : 1,
+          }}>{saving ? "Saving…" : "Save Notes"}</button>
+        </div>
+      </Card>
 
       {/* Signals */}
-      <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
-        <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "DM Mono, monospace", marginBottom: 12 }}>Recent Signals</div>
-        {founder.signals.map((sig, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, marginBottom: i < founder.signals.length - 1 ? 10 : 0, paddingBottom: i < founder.signals.length - 1 ? 10 : 0, borderBottom: i < founder.signals.length - 1 ? "1px solid #0e0e18" : "none" }}>
-            <SignalDot type={sig.type} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, color: sig.strong ? "#e2e8f0" : "#9ca3af", lineHeight: 1.4 }}>{sig.label}</div>
-              <div style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace", marginTop: 2 }}>{sig.date}</div>
-            </div>
-            {sig.strong && <span style={{ fontSize: 9, color: "#f59e0b", fontFamily: "DM Mono, monospace", fontWeight: 700, padding: "2px 5px", background: "rgba(245,158,11,0.1)", borderRadius: 3, height: "fit-content" }}>KEY</span>}
-          </div>
-        ))}
-      </div>
-
-      {/* Meta */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-        <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "12px 14px" }}>
-          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>Founded</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", fontFamily: "DM Mono, monospace" }}>{founder.founded || "—"}</div>
-        </div>
-        <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "12px 14px" }}>
-          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>YC Network</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: founder.yc_alumni_connections > 0 ? "#34d399" : "#4b5563", fontFamily: "DM Mono, monospace" }}>{founder.yc_alumni_connections} <span style={{ fontSize: 10, fontWeight: 400, color: "#6b7280" }}>alumni</span></div>
-        </div>
-        <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "12px 14px" }}>
-          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "DM Mono, monospace", marginBottom: 8 }}>Repos</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#58a6ff", fontFamily: "DM Mono, monospace" }}>{founder.github_repos || 0}</div>
-        </div>
-      </div>
+      {founder.signals?.length > 0 && (
+        <Card style={{ padding: 16, marginBottom: 16 }}>
+          <SectionTitle>Recent Signals ({founder.signals.length})</SectionTitle>
+          {founder.signals.map((s, i) => {
+            const src = SOURCE[s.type] || SOURCE.github;
+            return (
+              <div key={i} style={{
+                display: "flex", gap: 10, padding: "10px 0",
+                borderBottom: i < founder.signals.length - 1 ? `1px solid ${C.borderLight}` : "none",
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: src.color, flexShrink: 0, marginTop: 5 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: s.strong ? C.text : C.textSub, lineHeight: 1.4 }}>{s.label}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, fontFamily: "ui-monospace, monospace" }}>{s.date}</div>
+                </div>
+                {s.strong && <Badge color={C.amber} bg={C.amberLight} border="#fde68a">Key</Badge>}
+              </div>
+            );
+          })}
+        </Card>
+      )}
 
       {/* Tags */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 }}>
-        {founder.tags.map(t => (
-          <span key={t} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, background: "#0d0d1a", border: "1px solid #1e1e2e", color: "#6b7280", fontFamily: "DM Mono, monospace" }}>#{t}</span>
-        ))}
-      </div>
+      {founder.tags?.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+          {founder.tags.map(t => (
+            <span key={t} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.bg, border: `1px solid ${C.border}`, color: C.textSub }}>#{t}</span>
+          ))}
+        </div>
+      )}
 
       {/* CTA */}
-      <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+      <div style={{ display: "flex", gap: 10 }}>
         <button style={{
-          flex: 1, padding: "10px", background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
-          border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 700,
-          fontFamily: "DM Mono, monospace", cursor: "pointer", letterSpacing: "0.05em"
-        }}>REACH OUT</button>
+          flex: 1, padding: 12, borderRadius: 10, border: "none",
+          background: C.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+        }}>Reach Out</button>
         <button style={{
-          padding: "10px 14px", background: "#08080f", border: "1px solid #1e1e2e",
-          borderRadius: 8, color: "#9ca3af", fontSize: 12, cursor: "pointer"
-        }}>&#9733;</button>
+          padding: "12px 16px", borderRadius: 10, border: `1px solid ${C.border}`,
+          background: C.surface, color: C.textSub, fontSize: 13, cursor: "pointer",
+        }}>★ Save</button>
       </div>
     </div>
   );
@@ -386,328 +677,149 @@ function DetailPanel({ founder, onStatusChange, weights, onWeightChange, onWeigh
 
 const PAGE_SIZE = 50;
 
-export default function App() {
-  const [rawFounders, setRawFounders] = useState([]);
+function ScoutingView() {
+  const [founders, setFounders] = useState([]);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState(null);
-  const [filterSource, setFilterSource] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [sortBy, setSortBy] = useState("score");
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [loaded, setLoaded] = useState(false);
+  const [debSearch, setDebSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState(null);
-  const [live, setLive] = useState(false);
-  const [lastSync, setLastSync] = useState(null);
-  const [weights, setWeights] = useState({ ...DEFAULT_WEIGHTS });
   const listRef = useRef(null);
 
-  // Recompute scores when weights change
-  const founders = reweightFounders(rawFounders, weights);
-
-  // When selecting a founder, recompute their score too
-  const selectedFounder = selected
-    ? { ...selected, score: computeComposite(selected.scoreBreakdown, weights) }
-    : null;
-
-  const handleWeightChange = useCallback((dim, value) => {
-    setWeights(prev => ({ ...prev, [dim]: value }));
-  }, []);
-
-  const handleWeightReset = useCallback(() => {
-    setWeights({ ...DEFAULT_WEIGHTS });
-  }, []);
-
-  // Debounce search input (300ms)
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setDebSearch(search), 300);
+    return () => clearTimeout(t);
   }, [search]);
 
   const buildUrl = useCallback((offset = 0) => {
-    const params = new URLSearchParams({ limit: PAGE_SIZE, offset });
-    if (debouncedSearch) params.set("search", debouncedSearch);
-    if (filterSource !== "all") params.set("source", filterSource);
-    if (filterStatus !== "all") params.set("status", filterStatus);
-    if (sortBy === "stars") params.set("sort", "stars");
-    return `${API_BASE}/api/founders?${params}`;
-  }, [debouncedSearch, filterSource, filterStatus, sortBy]);
+    const p = new URLSearchParams({ limit: PAGE_SIZE, offset });
+    if (debSearch) p.set("search", debSearch);
+    if (filterStatus !== "all") p.set("status", filterStatus);
+    return `${API}/api/founders?${p}`;
+  }, [debSearch, filterStatus]);
 
-  // Fetch first page (on filter/search/sort change)
-  const fetchFounders = useCallback(async (isInitial = false) => {
-    if (!API_BASE) {
-      setLoading(false);
-      setError("No API URL configured. Set VITE_API_URL to connect.");
-      return;
-    }
-    if (isInitial) setLoading(true);
+  const fetchFounders = useCallback(async (reset = false) => {
+    if (reset) setLoading(true);
     try {
       const res = await fetch(buildUrl(0));
-      if (!res.ok) throw new Error(`API returned ${res.status}`);
       const data = await res.json();
-      setRawFounders(data.founders || []);
+      setFounders(data.founders || []);
       setTotal(data.total || 0);
-      setLive(true);
-      setLastSync(new Date());
-      setError(null);
-    } catch (err) {
-      if (isInitial) setError(`Failed to load founders: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [buildUrl]);
 
-  // Load next page (infinite scroll)
+  useEffect(() => { fetchFounders(true); }, [debSearch, filterStatus]);
+
   const loadMore = useCallback(async () => {
-    if (loadingMore || rawFounders.length >= total) return;
+    if (loadingMore || founders.length >= total) return;
     setLoadingMore(true);
     try {
-      const res = await fetch(buildUrl(rawFounders.length));
-      if (!res.ok) return;
+      const res = await fetch(buildUrl(founders.length));
       const data = await res.json();
-      const next = data.founders || [];
-      if (next.length > 0) {
-        setRawFounders(prev => [...prev, ...next]);
-      }
-    } catch { /* ignore */ } finally {
-      setLoadingMore(false);
-    }
-  }, [buildUrl, rawFounders.length, total, loadingMore]);
+      setFounders(prev => [...prev, ...(data.founders || [])]);
+    } finally { setLoadingMore(false); }
+  }, [founders.length, total, loadingMore, buildUrl]);
 
-  // Initial load
-  useEffect(() => {
-    setTimeout(() => setLoaded(true), 100);
-    fetchFounders(true);
-  }, []);
-
-  // Re-fetch when filters/search/sort change (reset to page 1)
-  useEffect(() => {
-    if (!loaded) return;
-    if (listRef.current) listRef.current.scrollTop = 0;
-    fetchFounders(false);
-  }, [debouncedSearch, filterSource, filterStatus, sortBy]);
-
-  // Background refresh every 60s
-  useEffect(() => {
-    if (!API_BASE) return;
-    const interval = setInterval(() => fetchFounders(false), 60000);
-    return () => clearInterval(interval);
-  }, [fetchFounders]);
-
-  // Infinite scroll: load more when near bottom of list panel
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    const onScroll = () => {
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-        loadMore();
-      }
-    };
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
+    const fn = () => { if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) loadMore(); };
+    el.addEventListener("scroll", fn);
+    return () => el.removeEventListener("scroll", fn);
   }, [loadMore]);
 
-  const hasMore = founders.length < total;
-
-  const handleStatusChange = async (id, newStatus) => {
-    setRawFounders(prev => prev.map(f => f.id === id ? { ...f, status: newStatus } : f));
-    setSelected(prev => prev?.id === id ? { ...prev, status: newStatus } : prev);
-    if (API_BASE) {
-      try {
-        await fetch(`${API_BASE}/api/founders/${id}/status`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: newStatus }),
-        });
-      } catch { /* optimistic update — ignore network errors */ }
-    }
+  const handleStatus = async (id, st) => {
+    setFounders(prev => prev.map(f => f.id === id ? { ...f, status: st } : f));
+    setSelected(prev => prev?.id === id ? { ...prev, status: st } : prev);
+    await fetch(`${API}/api/founders/${id}/status`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: st }),
+    });
   };
 
-  const stats = {
-    total: total || founders.length,
-    strong: founders.filter(f => f.score >= 90).length,
-    toContact: founders.filter(f => f.status === "to_contact").length,
-    avgScore: founders.length ? Math.round(founders.reduce((s, f) => s + f.score, 0) / founders.length) : 0,
+  const handleNotes = (id, notes) => {
+    setFounders(prev => prev.map(f => f.id === id ? { ...f, notes } : f));
+    setSelected(prev => prev?.id === id ? { ...prev, notes } : prev);
   };
 
   return (
-    <div style={{
-      height: "100vh", background: "#06060e", color: "#e2e8f0",
-      fontFamily: "system-ui, sans-serif", display: "flex", flexDirection: "column",
-      opacity: loaded ? 1 : 0, transition: "opacity 0.4s ease",
-    }}>
-      {/* Header */}
-      <header style={{
-        padding: "0 24px", height: 52, borderBottom: "1px solid #0e0e1a",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        background: "#06060e", flexShrink: 0
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 20, height: 20, background: "linear-gradient(135deg, #7c3aed, #2563eb)", borderRadius: 5 }} />
-            <span style={{ fontSize: 14, fontWeight: 900, fontFamily: "Syne, sans-serif", letterSpacing: "-0.01em", color: "#e2e8f0" }}>SCOUT</span>
-            <span style={{ fontSize: 9, color: "#4b5563", fontFamily: "DM Mono, monospace", letterSpacing: "0.15em", paddingTop: 1 }}>YC INTELLIGENCE</span>
-          </div>
-
-          <div style={{ width: 1, height: 20, background: "#13131f" }} />
-
-          {/* Stats pills */}
-          {[
-            { label: "Tracked", val: stats.total },
-            { label: "Strong Signal", val: stats.strong, color: "#34d399" },
-            { label: "To Contact", val: stats.toContact, color: "#f59e0b" },
-            { label: "Avg Score", val: stats.avgScore, color: "#7c3aed" },
-          ].map(({ label, val, color }) => (
-            <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: color || "#e2e8f0", fontFamily: "DM Mono, monospace" }}>{val}</span>
-              <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace" }}>{label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: loading ? "#6b7280" : live ? "#34d399" : "#ef4444", boxShadow: `0 0 6px ${loading ? "#6b7280" : live ? "#34d399" : "#ef4444"}` }} />
-          <span style={{ fontSize: 10, color: loading ? "#6b7280" : live ? "#34d399" : "#ef4444", fontFamily: "DM Mono, monospace" }}>{loading ? "LOADING" : live ? "LIVE" : "OFFLINE"}</span>
-        </div>
-      </header>
-
-      {/* Toolbar */}
-      <div style={{
-        padding: "10px 16px", borderBottom: "1px solid #0e0e1a",
-        display: "flex", alignItems: "center", gap: 10, background: "#07070f", flexShrink: 0
-      }}>
-        {/* Search */}
-        <div style={{ position: "relative", flex: 1, maxWidth: 260 }}>
-          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#4b5563", fontSize: 12 }}>&#x2315;</span>
+    <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      {/* List panel */}
+      <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", borderRight: `1px solid ${C.border}` }}>
+        {/* Toolbar */}
+        <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 8 }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search founders, companies..."
+            placeholder="🔍  Search founders, companies…"
             style={{
-              width: "100%", padding: "7px 12px 7px 28px", background: "#0a0a14",
-              border: "1px solid #13131f", borderRadius: 6, color: "#e2e8f0",
-              fontSize: 12, outline: "none", fontFamily: "DM Mono, monospace", boxSizing: "border-box"
+              width: "100%", boxSizing: "border-box", padding: "8px 12px",
+              border: `1px solid ${C.border}`, borderRadius: 8,
+              background: C.bg, fontSize: 13, color: C.text, outline: "none",
             }} />
+          <div style={{ display: "flex", gap: 4 }}>
+            {["all", ...Object.keys(STATUS)].map(s => {
+              const cfg = STATUS[s];
+              const active = filterStatus === s;
+              return (
+                <button key={s} onClick={() => setFilterStatus(s)} style={{
+                  padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500,
+                  cursor: "pointer", border: `1px solid ${active ? (cfg?.border || C.accentBorder) : C.border}`,
+                  background: active ? (cfg?.bg || C.accentLight) : C.surface,
+                  color: active ? (cfg?.color || C.accent) : C.textSub,
+                }}>{s === "all" ? "All" : cfg.label}</button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Source filter */}
-        <div style={{ display: "flex", gap: 4 }}>
-          {["all", "github", "hn", "producthunt"].map(src => {
-            const active = filterSource === src;
-            const label = src === "all" ? "All Sources" : SOURCE_COLORS[src].label;
-            const color = src !== "all" ? SOURCE_COLORS[src].accent : "#7c3aed";
-            return (
-              <button key={src} onClick={() => setFilterSource(src)} style={{
-                padding: "5px 10px", borderRadius: 5, fontSize: 10, fontFamily: "DM Mono, monospace", fontWeight: 700,
-                cursor: "pointer", letterSpacing: "0.08em", transition: "all 0.15s",
-                background: active ? `${color}18` : "#0a0a14",
-                border: active ? `1px solid ${color}55` : "1px solid #13131f",
-                color: active ? color : "#4b5563"
-              }}>{label}</button>
-            );
-          })}
+        {/* Count */}
+        <div style={{ padding: "6px 20px", fontSize: 11, color: C.textMuted, borderBottom: `1px solid ${C.borderLight}` }}>
+          {total} founders
         </div>
 
-        <div style={{ width: 1, height: 20, background: "#13131f" }} />
-
-        {/* Status filter */}
-        <div style={{ display: "flex", gap: 4 }}>
-          {["all", ...Object.keys(STATUS_CONFIG)].map(s => {
-            const active = filterStatus === s;
-            const cfg = s !== "all" ? STATUS_CONFIG[s] : null;
-            return (
-              <button key={s} onClick={() => setFilterStatus(s)} style={{
-                padding: "5px 9px", borderRadius: 5, fontSize: 10, fontFamily: "DM Mono, monospace", fontWeight: 600,
-                cursor: "pointer", transition: "all 0.15s",
-                background: active ? (cfg ? cfg.bg : "rgba(124,58,237,0.12)") : "#0a0a14",
-                border: active ? `1px solid ${cfg ? cfg.color : "#7c3aed"}44` : "1px solid #13131f",
-                color: active ? (cfg ? cfg.color : "#7c3aed") : "#4b5563"
-              }}>{s === "all" ? "All" : STATUS_CONFIG[s].label}</button>
-            );
-          })}
-        </div>
-
-        <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-          <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace", alignSelf: "center" }}>Sort:</span>
-          {["score", "stars"].map(s => (
-            <button key={s} onClick={() => setSortBy(s)} style={{
-              padding: "5px 9px", borderRadius: 5, fontSize: 10, fontFamily: "DM Mono, monospace",
-              cursor: "pointer", background: sortBy === s ? "rgba(124,58,237,0.15)" : "#0a0a14",
-              border: sortBy === s ? "1px solid #7c3aed55" : "1px solid #13131f",
-              color: sortBy === s ? "#7c3aed" : "#4b5563"
-            }}>{s === "score" ? "Score" : "GH Stars"}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Body */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* List panel */}
-        <div ref={listRef} style={{ width: 380, flexShrink: 0, borderRight: "1px solid #0e0e1a", overflowY: "auto" }}>
+        {/* List */}
+        <div ref={listRef} style={{ flex: 1, overflowY: "auto" }}>
           {loading ? (
-            <div style={{ padding: 60, textAlign: "center" }}>
-              <div style={{ width: 28, height: 28, border: "3px solid #1e1e2e", borderTop: "3px solid #7c3aed", borderRadius: "50%", margin: "0 auto 16px", animation: "spin 0.8s linear infinite" }} />
-              <div style={{ color: "#4b5563", fontSize: 12, fontFamily: "DM Mono, monospace" }}>LOADING FOUNDERS...</div>
-              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-            </div>
-          ) : error ? (
-            <div style={{ padding: 40, textAlign: "center" }}>
-              <div style={{ color: "#ef4444", fontSize: 12, fontFamily: "DM Mono, monospace", marginBottom: 12 }}>{error}</div>
-              <button onClick={() => fetchFounders(true)} style={{
-                padding: "8px 16px", background: "#1e1e2e", border: "1px solid #2d2d44", borderRadius: 6,
-                color: "#9ca3af", fontSize: 11, fontFamily: "DM Mono, monospace", cursor: "pointer"
-              }}>RETRY</button>
-            </div>
+            <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>Loading founders…</div>
           ) : founders.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: "#2d2d44", fontSize: 12, fontFamily: "DM Mono, monospace" }}>
-              {(debouncedSearch || filterSource !== "all" || filterStatus !== "all") ? "NO FOUNDERS MATCH FILTERS" : "NO FOUNDERS YET — RUN THE PIPELINE"}
-            </div>
+            <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>No founders match filters</div>
           ) : (
-            <>
-              {founders.map(f => (
-                <FounderCard key={f.id} founder={f} onClick={setSelected} selected={selected?.id === f.id} />
-              ))}
-              {loadingMore && (
-                <div style={{ padding: 16, textAlign: "center" }}>
-                  <div style={{ width: 20, height: 20, border: "2px solid #1e1e2e", borderTop: "2px solid #7c3aed", borderRadius: "50%", margin: "0 auto", animation: "spin 0.8s linear infinite" }} />
-                </div>
-              )}
-              {hasMore && !loadingMore && (
-                <div style={{ padding: 12, textAlign: "center" }}>
-                  <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "DM Mono, monospace" }}>
-                    {founders.length} of {total} founders
-                  </span>
-                </div>
-              )}
-            </>
+            founders.map(f => (
+              <FounderRow key={f.id} founder={f} selected={selected?.id === f.id} onClick={setSelected} />
+            ))
           )}
-        </div>
-
-        {/* Detail panel */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <DetailPanel
-            founder={selectedFounder}
-            onStatusChange={handleStatusChange}
-            weights={weights}
-            onWeightChange={handleWeightChange}
-            onWeightReset={handleWeightReset}
-          />
+          {loadingMore && <div style={{ padding: 12, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading more…</div>}
         </div>
       </div>
 
-      {/* Footer */}
-      <div style={{
-        height: 28, borderTop: "1px solid #0e0e1a", background: "#05050c",
-        display: "flex", alignItems: "center", padding: "0 16px", gap: 16
-      }}>
-        {["HN", "GitHub", "Product Hunt"].map((s, i) => (
-          <span key={s} style={{ fontSize: 9, color: "#2d2d44", fontFamily: "DM Mono, monospace" }}>
-            <span style={{ color: Object.values(SOURCE_COLORS)[i].accent }}>{s}</span> · {lastSync ? `Synced ${Math.round((Date.now() - lastSync) / 60000)}m ago` : "No sync yet"}
-          </span>
-        ))}
-        <span style={{ marginLeft: "auto", fontSize: 9, color: "#2d2d44", fontFamily: "DM Mono, monospace" }}>
-          {founders.length}{total > founders.length ? ` of ${total}` : ""} founders · {loading ? "Loading..." : live ? "Turso" : "Not connected"}
-        </span>
+      {/* Detail panel */}
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        <FounderDetail founder={selected} onStatusChange={handleStatus} onNotesChange={handleNotes} />
+      </div>
+    </div>
+  );
+}
+
+// ── Root App ──────────────────────────────────────────────────
+
+export default function App() {
+  const [view, setView] = useState("scouting");
+  const [stats, setStats] = useState({ total: 0, strong: 0, toContact: 0, avgScore: 0 });
+
+  useEffect(() => {
+    if (!API) return;
+    fetch(`${API}/api/stats`).then(r => r.json()).then(setStats).catch(() => {});
+  }, []);
+
+  return (
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: C.bg, color: C.text, fontFamily: "Inter, system-ui, sans-serif" }}>
+      <TopNav view={view} setView={setView} stats={stats} />
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {view === "themes" && <ThemesView />}
+        {view === "emergence" && <EmergenceView />}
+        {view === "pulse" && <PulseView />}
+        {view === "scouting" && <ScoutingView />}
       </div>
     </div>
   );

@@ -369,6 +369,12 @@ def _migrate_scores_columns(conn):
     except Exception:
         pass  # Column already exists
 
+    # Add notes column if missing
+    try:
+        conn.execute("ALTER TABLE founders ADD COLUMN notes TEXT DEFAULT ''")
+    except Exception:
+        pass  # Column already exists
+
 
 # ── Data helpers ─────────────────────────────────────────────
 

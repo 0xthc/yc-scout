@@ -144,6 +144,7 @@ def _build_founder(conn, row) -> dict:
         "score": round(score_row["composite"]) if score_row else 0,
         "scoreBreakdown": _extract_breakdown(score_row),
         "signals": signals,
+        "notes": row["notes"] if "notes" in row.keys() else "",
         "github_stars": stats_row["github_stars"] if stats_row else 0,
         "github_commits_90d": stats_row["github_commits_90d"] if stats_row else 0,
         "github_repos": stats_row["github_repos"] if stats_row else 0,
@@ -359,6 +360,204 @@ def trigger_pipeline():
     result = run_pipeline()
     _cache.clear()
     return result
+
+
+@app.get("/api/themes")
+def list_themes():
+    """List all detected theme clusters sorted by emergence score."""
+    cached = _cache_get("themes")
+    if cached:
+        return cached
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM themes ORDER BY emergence_score DESC"
+        ).fetchall()
+
+        themes = []
+        for t in rows:
+            theme_id = t["id"]
+            founders = conn.execute(
+                """SELECT f.id, f.name, f.handle, f.company, f.domain, f.bio,
+                          (SELECT composite FROM scores WHERE founder_id = f.id ORDER BY scored_at DESC LIMIT 1) as score
+                   FROM founders f
+                   JOIN founder_themes ft ON ft.founder_id = f.id
+                   WHERE ft.theme_id = ?
+                   ORDER BY score DESC""",
+                (theme_id,),
+            ).fetchall()
+
+            themes.append({
+                "id": theme_id,
+                "name": t["name"],
+                "emergenceScore": t["emergence_score"],
+                "builderCount": t["builder_count"],
+                "weeklyVelocity": t["weekly_velocity"],
+                "painSummary": t["pain_summary"],
+                "unlockSummary": t["unlock_summary"],
+                "founderOrigin": t["founder_origin"],
+                "firstDetected": t["first_detected"],
+                "updatedAt": t["updated_at"],
+                "founders": [
+                    {
+                        "id": f["id"],
+                        "name": f["name"],
+                        "handle": f["handle"],
+                        "company": f["company"] or "",
+                        "domain": f["domain"] or "",
+                        "bio": f["bio"] or "",
+                        "score": round(f["score"]) if f["score"] else 0,
+                    }
+                    for f in founders
+                ],
+            })
+
+    _cache_set("themes", themes)
+    return themes
+
+
+@app.get("/api/themes/{theme_id}")
+def get_theme(theme_id: int):
+    """Get a single theme with full founder details."""
+    with get_db() as conn:
+        t = conn.execute("SELECT * FROM themes WHERE id = ?", (theme_id,)).fetchone()
+        if not t:
+            raise HTTPException(404, "Theme not found")
+
+        founders = conn.execute(
+            """SELECT f.* FROM founders f
+               JOIN founder_themes ft ON ft.founder_id = f.id
+               WHERE ft.theme_id = ?""",
+            (theme_id,),
+        ).fetchall()
+
+        return {
+            "id": t["id"],
+            "name": t["name"],
+            "emergenceScore": t["emergence_score"],
+            "builderCount": t["builder_count"],
+            "weeklyVelocity": t["weekly_velocity"],
+            "painSummary": t["pain_summary"],
+            "unlockSummary": t["unlock_summary"],
+            "founderOrigin": t["founder_origin"],
+            "firstDetected": t["first_detected"],
+            "founders": _build_founders_batch(conn, founders),
+        }
+
+
+@app.get("/api/emergence")
+def get_emergence(hours: int = Query(168, description="Look-back window in hours (default 7 days)")):
+    """Return recent emergence events split by new themes and inflection founders."""
+    cache_key = f"emergence:{hours}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    with get_db() as conn:
+        events = conn.execute(
+            """SELECT * FROM emergence_events
+               WHERE detected_at > datetime('now', ?)
+               ORDER BY detected_at DESC""",
+            (f"-{hours} hours",),
+        ).fetchall()
+
+        new_themes = []
+        inflection_founders = []
+
+        for e in events:
+            entry = {
+                "id": e["id"],
+                "eventType": e["event_type"],
+                "entityId": e["entity_id"],
+                "entityType": e["entity_type"],
+                "signal": e["signal"],
+                "deltaBefore": e["delta_before"],
+                "deltaAfter": e["delta_after"],
+                "detectedAt": e["detected_at"],
+            }
+
+            if e["entity_type"] == "theme":
+                # Enrich with theme info
+                t = conn.execute("SELECT name, emergence_score, builder_count FROM themes WHERE id = ?", (e["entity_id"],)).fetchone()
+                if t:
+                    entry["themeName"] = t["name"]
+                    entry["emergenceScore"] = t["emergence_score"]
+                    entry["builderCount"] = t["builder_count"]
+                new_themes.append(entry)
+            else:
+                # Enrich with founder info
+                f = conn.execute(
+                    """SELECT f.name, f.handle, f.company, f.domain,
+                              (SELECT composite FROM scores WHERE founder_id = f.id ORDER BY scored_at DESC LIMIT 1) as score
+                       FROM founders f WHERE f.id = ?""",
+                    (e["entity_id"],),
+                ).fetchone()
+                if f:
+                    entry["founderName"] = f["name"]
+                    entry["founderHandle"] = f["handle"]
+                    entry["company"] = f["company"] or ""
+                    entry["domain"] = f["domain"] or ""
+                    entry["score"] = round(f["score"]) if f["score"] else 0
+                inflection_founders.append(entry)
+
+    result = {"newThemes": new_themes, "inflectionFounders": inflection_founders}
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.get("/api/pulse")
+def get_pulse(hours: int = Query(48, description="Look-back window in hours")):
+    """Return raw chronological signal feed for the last N hours."""
+    cache_key = f"pulse:{hours}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    with get_db() as conn:
+        signals = conn.execute(
+            """SELECT s.*, f.name as founder_name, f.handle, f.company
+               FROM signals s
+               JOIN founders f ON f.id = s.founder_id
+               WHERE s.detected_at > datetime('now', ?)
+               ORDER BY s.detected_at DESC
+               LIMIT 200""",
+            (f"-{hours} hours",),
+        ).fetchall()
+
+        result = [
+            {
+                "id": s["id"],
+                "founderId": s["founder_id"],
+                "founderName": s["founder_name"],
+                "founderHandle": s["handle"],
+                "company": s["company"] or "",
+                "source": s["source"],
+                "label": s["label"],
+                "url": s["url"] or "",
+                "strong": bool(s["strong"]),
+                "detectedAt": s["detected_at"],
+            }
+            for s in signals
+        ]
+
+    _cache_set(cache_key, result)
+    return result
+
+
+@app.patch("/api/founders/{founder_id}/notes")
+def update_notes(founder_id: int, body: dict):
+    """Update private notes on a founder."""
+    notes = body.get("notes", "")
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM founders WHERE id = ?", (founder_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Founder not found")
+        conn.execute(
+            "UPDATE founders SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (notes, founder_id),
+        )
+    _cache.clear()
+    return {"ok": True}
 
 
 @app.get("/api/stats")
