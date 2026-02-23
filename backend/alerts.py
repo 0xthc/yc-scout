@@ -131,10 +131,19 @@ def check_alerts(conn, founder_id, founder_name, handle, scores, log_alert):
     # Trigger 2: Execution velocity spike
     prev = get_previous_score(conn, founder_id)
     if prev:
-        velocity_delta = scores["execution_velocity"] - prev["execution_velocity"]
+        prev_velocity = prev.get("execution_velocity", None) if hasattr(prev, 'get') else None
+        if prev_velocity is None:
+            try:
+                prev_velocity = prev["execution_velocity"]
+            except (KeyError, IndexError):
+                try:
+                    prev_velocity = prev["domain_score"]  # legacy column name
+                except (KeyError, IndexError):
+                    prev_velocity = 0
+        velocity_delta = scores["execution_velocity"] - prev_velocity
         if velocity_delta >= ALERT_MOMENTUM_SPIKE:
             alert_type = "Execution Velocity Spike"
-            detail = f"Execution velocity jumped +{velocity_delta:.0f} pts ({prev['execution_velocity']} → {scores['execution_velocity']})"
+            detail = f"Execution velocity jumped +{velocity_delta:.0f} pts ({prev_velocity} → {scores['execution_velocity']})"
             msg = f"SCOUT: {founder_name} ({handle}) velocity spike — {detail}"
 
             blocks = _format_slack_blocks(founder_name, handle, scores, alert_type, detail)

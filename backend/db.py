@@ -120,6 +120,12 @@ class _TursoRow:
             return self._map[key]
         return self._vals[key]
 
+    def __contains__(self, key):
+        return key in self._map
+
+    def get(self, key, default=None):
+        return self._map.get(key, default)
+
     def keys(self):
         return self._cols
 
@@ -281,6 +287,30 @@ def get_db():
 def init_db():
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        _migrate_scores_columns(conn)
+
+
+# Column mapping: old name → new name
+_SCORE_COLUMN_RENAMES = [
+    ("momentum", "founder_quality"),
+    ("domain_score", "execution_velocity"),
+    ("team", "market_conviction"),
+    ("traction", "early_traction"),
+    ("ycfit", "deal_availability"),
+]
+
+
+def _migrate_scores_columns(conn):
+    """Rename legacy score columns if they exist (one-time migration).
+
+    Uses ALTER TABLE RENAME COLUMN (supported since SQLite 3.25 / libsql).
+    Each rename is wrapped in try/except so it's safe to run repeatedly.
+    """
+    for old_name, new_name in _SCORE_COLUMN_RENAMES:
+        try:
+            conn.execute(f"ALTER TABLE scores RENAME COLUMN {old_name} TO {new_name}")
+        except Exception:
+            pass  # Column already renamed, doesn't exist, or table is new
 
 
 # ── Data helpers ─────────────────────────────────────────────

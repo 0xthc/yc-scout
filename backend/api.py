@@ -49,6 +49,34 @@ app.add_middleware(
 )
 
 
+def _get_score(row, new_key, old_key):
+    """Get a score value from a row, handling both old and new column names."""
+    try:
+        return row[new_key]
+    except (KeyError, IndexError):
+        try:
+            return row[old_key]
+        except (KeyError, IndexError):
+            return 0
+
+
+def _extract_breakdown(score_row):
+    """Extract score breakdown dict, handling both old and new column names."""
+    if not score_row:
+        return {
+            "founder_quality": 0, "execution_velocity": 0,
+            "market_conviction": 0, "early_traction": 0,
+            "deal_availability": 0,
+        }
+    return {
+        "founder_quality": round(_get_score(score_row, "founder_quality", "momentum")),
+        "execution_velocity": round(_get_score(score_row, "execution_velocity", "domain_score")),
+        "market_conviction": round(_get_score(score_row, "market_conviction", "team")),
+        "early_traction": round(_get_score(score_row, "early_traction", "traction")),
+        "deal_availability": round(_get_score(score_row, "deal_availability", "ycfit")),
+    }
+
+
 def _build_founder(conn, row) -> dict:
     """Assemble a full founder response from DB row + related data."""
     fid = row["id"]
@@ -113,13 +141,7 @@ def _build_founder(conn, row) -> dict:
         "sources": sources,
         "tags": tags,
         "score": round(score_row["composite"]) if score_row else 0,
-        "scoreBreakdown": {
-            "founder_quality": round(score_row["founder_quality"]) if score_row else 0,
-            "execution_velocity": round(score_row["execution_velocity"]) if score_row else 0,
-            "market_conviction": round(score_row["market_conviction"]) if score_row else 0,
-            "early_traction": round(score_row["early_traction"]) if score_row else 0,
-            "deal_availability": round(score_row["deal_availability"]) if score_row else 0,
-        },
+        "scoreBreakdown": _extract_breakdown(score_row),
         "signals": signals,
         "github_stars": stats_row["github_stars"] if stats_row else 0,
         "hn_karma": stats_row["hn_karma"] if stats_row else 0,
@@ -211,13 +233,7 @@ def _build_founders_batch(conn, rows):
             "sources": sources_map.get(fid, []),
             "tags": tags_map.get(fid, []),
             "score": round(score_row["composite"]) if score_row else 0,
-            "scoreBreakdown": {
-                "founder_quality": round(score_row["founder_quality"]) if score_row else 0,
-                "execution_velocity": round(score_row["execution_velocity"]) if score_row else 0,
-                "market_conviction": round(score_row["market_conviction"]) if score_row else 0,
-                "early_traction": round(score_row["early_traction"]) if score_row else 0,
-                "deal_availability": round(score_row["deal_availability"]) if score_row else 0,
-            },
+            "scoreBreakdown": _extract_breakdown(score_row),
             "signals": signals_map.get(fid, []),
             "github_stars": stats_row["github_stars"] if stats_row else 0,
             "hn_karma": stats_row["hn_karma"] if stats_row else 0,
