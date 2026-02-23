@@ -368,13 +368,58 @@ function DetailPanel({ founder, onStatusChange, weights, onWeightChange, onWeigh
         ))}
       </div>
 
+      {/* Contact info */}
+      {(founder.email || founder.twitter || founder.linkedin || founder.website) && (
+        <div style={{ background: "#08080f", border: "1px solid #13131f", borderRadius: 8, padding: "14px 16px", marginTop: 14 }}>
+          <div style={{ fontSize: 9, color: "#4b5563", textTransform: "uppercase", letterSpacing: "0.12em", fontFamily: "DM Mono, monospace", marginBottom: 10 }}>Contact</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {founder.email && (
+              <a href={`mailto:${founder.email}`} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#9ca3af", fontFamily: "DM Mono, monospace", textDecoration: "none", padding: "4px 8px", background: "#0d0d1a", border: "1px solid #1e1e2e", borderRadius: 5 }}
+                onMouseEnter={e => e.currentTarget.style.color = "#e2e8f0"} onMouseLeave={e => e.currentTarget.style.color = "#9ca3af"}>
+                <span style={{ fontSize: 12 }}>✉</span> {founder.email}
+              </a>
+            )}
+            {founder.twitter && (
+              <a href={`https://x.com/${founder.twitter.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#9ca3af", fontFamily: "DM Mono, monospace", textDecoration: "none", padding: "4px 8px", background: "#0d0d1a", border: "1px solid #1e1e2e", borderRadius: 5 }}
+                onMouseEnter={e => e.currentTarget.style.color = "#1d9bf0"} onMouseLeave={e => e.currentTarget.style.color = "#9ca3af"}>
+                <span style={{ fontSize: 12 }}>𝕏</span> {founder.twitter.startsWith("@") ? founder.twitter : `@${founder.twitter}`}
+              </a>
+            )}
+            {founder.linkedin && (
+              <a href={founder.linkedin.startsWith("http") ? founder.linkedin : `https://${founder.linkedin}`} target="_blank" rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#9ca3af", fontFamily: "DM Mono, monospace", textDecoration: "none", padding: "4px 8px", background: "#0d0d1a", border: "1px solid #1e1e2e", borderRadius: 5 }}
+                onMouseEnter={e => e.currentTarget.style.color = "#0a66c2"} onMouseLeave={e => e.currentTarget.style.color = "#9ca3af"}>
+                <span style={{ fontSize: 12 }}>in</span> LinkedIn
+              </a>
+            )}
+            {founder.website && (
+              <a href={founder.website.startsWith("http") ? founder.website : `https://${founder.website}`} target="_blank" rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#9ca3af", fontFamily: "DM Mono, monospace", textDecoration: "none", padding: "4px 8px", background: "#0d0d1a", border: "1px solid #1e1e2e", borderRadius: 5 }}
+                onMouseEnter={e => e.currentTarget.style.color = "#34d399"} onMouseLeave={e => e.currentTarget.style.color = "#9ca3af"}>
+                <span style={{ fontSize: 12 }}>🌐</span> {founder.website.replace(/^https?:\/\//, "")}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* CTA */}
       <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-        <button style={{
-          flex: 1, padding: "10px", background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
-          border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 700,
-          fontFamily: "DM Mono, monospace", cursor: "pointer", letterSpacing: "0.05em"
-        }}>REACH OUT</button>
+        {founder.email ? (
+          <a href={`mailto:${founder.email}`} style={{
+            flex: 1, padding: "10px", background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
+            border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 700,
+            fontFamily: "DM Mono, monospace", cursor: "pointer", letterSpacing: "0.05em",
+            textDecoration: "none", textAlign: "center", display: "block"
+          }}>REACH OUT</a>
+        ) : (
+          <button style={{
+            flex: 1, padding: "10px", background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
+            border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 700,
+            fontFamily: "DM Mono, monospace", cursor: "pointer", letterSpacing: "0.05em"
+          }}>REACH OUT</button>
+        )}
         <button style={{
           padding: "10px 14px", background: "#08080f", border: "1px solid #1e1e2e",
           borderRadius: 8, color: "#9ca3af", fontSize: 12, cursor: "pointer"

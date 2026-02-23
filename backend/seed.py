@@ -11,6 +11,7 @@ DEMO_FOUNDERS = [
         "bio": "Ex-Google Brain. Building real-time financial data infra for emerging markets. 3 YC alumni in my network.",
         "domain": "Fintech Infra", "stage": "Pre-seed", "company": "StreamLedger",
         "founded": "2024-09", "status": "to_contact", "yc_alumni_connections": 3,
+        "email": "aiko@streamledger.io", "twitter": "@aiko_builds", "linkedin": "linkedin.com/in/aikotanaka", "website": "streamledger.io",
         "sources": ["github", "hn"],
         "tags": ["infrastructure", "fintech", "api"],
         "signals": [
@@ -26,6 +27,7 @@ DEMO_FOUNDERS = [
         "bio": "Biomedical engineer turned founder. Automating clinical trial recruitment with AI. FDA advisor background.",
         "domain": "Health AI", "stage": "Pre-seed", "company": "TrialMatch",
         "founded": "2024-11", "status": "watching", "yc_alumni_connections": 1,
+        "email": "marcus@trialmatch.ai", "twitter": "@marcuswebb", "linkedin": "", "website": "trialmatch.ai",
         "sources": ["hn", "producthunt"],
         "tags": ["healthtech", "ai", "biotech"],
         "signals": [
@@ -41,6 +43,7 @@ DEMO_FOUNDERS = [
         "bio": "Previously DeepMind. Open source compiler toolchain for ML workloads — 2.8k GitHub stars in 6 weeks.",
         "domain": "Dev Tools / AI Infra", "stage": "Bootstrapped", "company": "MLCompile",
         "founded": "2024-08", "status": "contacted", "yc_alumni_connections": 5,
+        "email": "priya@mlcompile.dev", "twitter": "@priya_nair_dev", "linkedin": "linkedin.com/in/priyanair", "website": "mlcompile.dev",
         "sources": ["github", "hn", "producthunt"],
         "tags": ["devtools", "ml", "open-source", "compiler"],
         "signals": [
@@ -56,6 +59,7 @@ DEMO_FOUNDERS = [
         "bio": "Serial founder (2 exits). Building B2B SaaS for construction project management. $18k MRR in month 3.",
         "domain": "B2B SaaS / Proptech", "stage": "Seed", "company": "ConstructIQ",
         "founded": "2024-07", "status": "to_contact", "yc_alumni_connections": 2,
+        "email": "", "twitter": "@jordancole", "linkedin": "linkedin.com/in/jordancole", "website": "constructiq.co",
         "sources": ["producthunt", "hn"],
         "tags": ["saas", "proptech", "construction", "b2b"],
         "signals": [
@@ -71,6 +75,7 @@ DEMO_FOUNDERS = [
         "bio": "PhD dropout (NLP/multilingual). Building real-time translation infra for enterprise Slack/Teams.",
         "domain": "NLP / Enterprise", "stage": "Pre-seed", "company": "LinguaSync",
         "founded": "2024-10", "status": "watching", "yc_alumni_connections": 0,
+        "email": "elif@linguasync.io", "twitter": "", "linkedin": "linkedin.com/in/elifdemir", "website": "linguasync.io",
         "sources": ["github", "producthunt"],
         "tags": ["nlp", "enterprise", "saas", "translation"],
         "signals": [
@@ -86,6 +91,7 @@ DEMO_FOUNDERS = [
         "bio": "Ex-Stripe LATAM. Building payment infra for SMBs across LatAm — processing $200k/mo at month 6.",
         "domain": "Fintech / Payments", "stage": "Seed", "company": "PayFlow",
         "founded": "2024-05", "status": "pass", "yc_alumni_connections": 4,
+        "email": "tomas@payflow.mx", "twitter": "@tomas_build", "linkedin": "", "website": "payflow.mx",
         "sources": ["hn", "github"],
         "tags": ["fintech", "payments", "latam", "infrastructure"],
         "signals": [
@@ -114,6 +120,8 @@ def seed():
                 bio=f["bio"], domain=f["domain"], stage=f["stage"],
                 company=f["company"], founded=f["founded"], status=f["status"],
                 yc_alumni_connections=f["yc_alumni_connections"],
+                email=f.get("email", ""), twitter=f.get("twitter", ""),
+                linkedin=f.get("linkedin", ""), website=f.get("website", ""),
             )
             for src in f["sources"]:
                 add_source(conn, fid, src)

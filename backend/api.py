@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db import get_db, init_db, _TursoConnection
-from backend.models import FounderOut, PaginatedFounders, PipelineResult, StatusUpdate
+from backend.models import FounderOut, PaginatedFounders, PipelineResult, StatusUpdate, ContactUpdate
 from backend.pipeline import run_pipeline
 
 logger = logging.getLogger(__name__)
@@ -139,6 +139,10 @@ def _build_founder(conn, row) -> dict:
         "status": row["status"] or "to_contact",
         "yc_alumni_connections": row["yc_alumni_connections"] or 0,
         "incubator": row["incubator"] or "",
+        "email": row["email"] or "",
+        "twitter": row["twitter"] or "",
+        "linkedin": row["linkedin"] or "",
+        "website": row["website"] or "",
         "sources": sources,
         "tags": tags,
         "score": round(score_row["composite"]) if score_row else 0,
@@ -238,6 +242,10 @@ def _build_founders_batch(conn, rows):
             "status": row["status"] or "to_contact",
             "yc_alumni_connections": row["yc_alumni_connections"] or 0,
             "incubator": row["incubator"] or "",
+            "email": row["email"] or "",
+            "twitter": row["twitter"] or "",
+            "linkedin": row["linkedin"] or "",
+            "website": row["website"] or "",
             "sources": sources_map.get(fid, []),
             "tags": tags_map.get(fid, []),
             "score": round(score_row["composite"]) if score_row else 0,
@@ -351,6 +359,26 @@ def update_status(founder_id: int, body: StatusUpdate):
         )
     _cache.clear()
     return {"ok": True, "status": body.status}
+
+
+@app.patch("/api/founders/{founder_id}/contact")
+def update_contact(founder_id: int, body: ContactUpdate):
+    """Update a founder's contact information."""
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM founders WHERE id = ?", (founder_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Founder not found")
+        allowed = {"email", "twitter", "linkedin", "website"}
+        fields = {k: v for k, v in body.model_dump().items() if v is not None and k in allowed}
+        if fields:
+            sets = ", ".join(f"{k} = ?" for k in fields)
+            vals = list(fields.values())
+            conn.execute(
+                f"UPDATE founders SET {sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                vals + [founder_id],
+            )
+    _cache.clear()
+    return {"ok": True, **fields}
 
 
 @app.post("/api/pipeline/run", response_model=PipelineResult)
