@@ -20,7 +20,13 @@ class FounderOut(BaseModel):
     scoreBreakdown: dict[str, int]
     signals: list[dict]
     github_stars: int
+    github_commits_90d: int
+    github_repos: int
     hn_karma: int
+    hn_submissions: int
+    hn_top_score: int
+    ph_upvotes: int
+    ph_launches: int
     followers: int
 
 
