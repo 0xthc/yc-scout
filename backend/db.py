@@ -102,6 +102,56 @@ CREATE TABLE IF NOT EXISTS alert_log (
 CREATE INDEX IF NOT EXISTS idx_signals_founder ON signals(founder_id, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scores_founder ON scores(founder_id, scored_at DESC);
 CREATE INDEX IF NOT EXISTS idx_stats_founder ON stats_snapshots(founder_id, captured_at DESC);
+
+CREATE TABLE IF NOT EXISTS founder_embeddings (
+    founder_id      INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE PRIMARY KEY,
+    vector          BLOB NOT NULL,
+    content_hash    TEXT NOT NULL,
+    embedded_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS themes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    emergence_score INTEGER DEFAULT 0,
+    builder_count   INTEGER DEFAULT 0,
+    weekly_velocity REAL DEFAULT 0,
+    pain_summary    TEXT DEFAULT '',
+    unlock_summary  TEXT DEFAULT '',
+    founder_origin  TEXT DEFAULT '',
+    first_detected  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS founder_themes (
+    founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
+    theme_id    INTEGER NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+    similarity  REAL DEFAULT 0,
+    added_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (founder_id, theme_id)
+);
+
+CREATE TABLE IF NOT EXISTS theme_history (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    theme_id        INTEGER NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+    emergence_score INTEGER,
+    builder_count   INTEGER,
+    captured_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS emergence_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type  TEXT NOT NULL,
+    entity_id   INTEGER NOT NULL,
+    entity_type TEXT NOT NULL,
+    signal      TEXT NOT NULL,
+    delta_before REAL,
+    delta_after  REAL,
+    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_emergence_detected ON emergence_events(detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_theme_history ON theme_history(theme_id, captured_at DESC);
 """
 
 

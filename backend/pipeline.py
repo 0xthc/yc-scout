@@ -19,8 +19,11 @@ import logging
 import time
 
 from backend.alerts import check_alerts
+from backend.anomaly import detect_anomalies
+from backend.clustering import cluster_founders
 from backend.config import PIPELINE_INTERVAL_MINUTES
 from backend.db import get_db, init_db
+from backend.embedder import embed_all_founders
 from backend.scoring import score_founder
 from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, enrich_founders
 
@@ -57,6 +60,24 @@ def run_pipeline():
             founders_scraped += scrape_producthunt(conn)
         except Exception as e:
             logger.error("Product Hunt scraper failed: %s", e)
+
+    # Phase 1.5: Embed founder content
+    with get_db() as conn:
+        logger.info("Phase 1.5: Embedding founders")
+        try:
+            embedded = embed_all_founders(conn)
+            logger.info("Embedded %d founders", embedded)
+        except Exception as e:
+            logger.error("Embedding phase failed: %s", e)
+
+    # Phase 1.6: Cluster founders into themes
+    with get_db() as conn:
+        logger.info("Phase 1.6: Clustering founders into themes")
+        try:
+            themes = cluster_founders(conn)
+            logger.info("Upserted %d themes", themes)
+        except Exception as e:
+            logger.error("Clustering phase failed: %s", e)
 
     # Phase 2: Cross-platform enrichment
     with get_db() as conn:
@@ -104,6 +125,15 @@ def run_pipeline():
                 alerts_sent += sent
             except Exception as e:
                 logger.error("Alert check failed for founder %d: %s", fid, e)
+
+    # Phase 3.5: Anomaly detection
+    with get_db() as conn:
+        logger.info("Phase 3.5: Detecting anomalies")
+        try:
+            anomalies = detect_anomalies(conn)
+            logger.info("Detected %d emergence events", anomalies)
+        except Exception as e:
+            logger.error("Anomaly detection failed: %s", e)
 
     logger.info(
         "Pipeline complete: scraped=%d, scored=%d, alerts=%d",
