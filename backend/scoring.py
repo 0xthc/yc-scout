@@ -73,6 +73,7 @@ def score_founder_quality(stats, founder_info, signals):
       - Previous building history (repo count, signal volume = builder pattern)
       - Network quality (who follows them — YC alumni connections, follower quality)
       - Cofounder complementarity (tech + business coverage in bio)
+      - Incubator affiliation (YC, 500 Global, Plug and Play = strong quality signal)
     """
     bio = (founder_info.get("bio") or "").lower()
     commits = stats.get("github_commits_90d", 0)
@@ -83,6 +84,7 @@ def score_founder_quality(stats, founder_info, signals):
     ph_launches = stats.get("ph_launches", 0)
     connections = founder_info.get("yc_alumni_connections", 0)
     followers = stats.get("followers", 0)
+    incubator = (founder_info.get("incubator") or "").lower()
 
     # Technical depth: commit consistency + project quality (stars) + breadth (repos)
     technical = (
@@ -120,13 +122,27 @@ def score_founder_quality(stats, founder_info, signals):
     has_biz = any(kw in bio for kw in biz_kw)
     complementarity = 100 if (has_tech and has_biz) else 60 if has_tech else 40 if has_biz else 20
 
-    return (
+    # Incubator affiliation: being accepted to a top accelerator is a
+    # strong external validation of founder quality
+    # YC is the strongest signal, 500 and PnP are solid
+    if "yc" in incubator:
+        incubator_boost = 30  # YC acceptance = major quality signal
+    elif "500" in incubator:
+        incubator_boost = 20
+    elif "plug" in incubator:
+        incubator_boost = 18
+    else:
+        incubator_boost = 0
+
+    base = (
         technical * 0.30
         + distribution * 0.20
         + history * 0.20
         + network * 0.15
         + complementarity * 0.15
     )
+
+    return min(base + incubator_boost, 100)
 
 
 # ── Dimension 2: Execution Velocity ──────────────────────────
@@ -284,9 +300,11 @@ def score_deal_availability(stats, founder_info, signals):
       - Low VC engagement (not yet swarmed by investors)
       - No press coverage (first press = deal window closing)
       - Early stage indicators (pre-seed > seed > series A)
+      - Incubator batch timing (current batch = raise imminent, act NOW)
     """
     stage = (founder_info.get("stage") or "").lower()
     followers = stats.get("followers", 0)
+    incubator = (founder_info.get("incubator") or "").lower()
 
     # Stage indicator: earlier = more available
     stage_scores = {
@@ -327,12 +345,25 @@ def score_deal_availability(stats, founder_info, signals):
     else:
         exposure_score = 20
 
-    return (
+    base = (
         stage_score * 0.35
         + no_fundraise * 0.25
         + profile_score * 0.20
         + exposure_score * 0.20
     )
+
+    # Incubator batch timing bonus: founders in a current batch are about
+    # to raise at Demo Day (typically ~8 weeks out). This is *the* window
+    # to get in early before the round fills up.
+    # YC gets a bigger bonus because Demo Day timing is more predictable.
+    if incubator:
+        if "yc" in incubator:
+            batch_bonus = 15  # YC Demo Day = precise fundraise window
+        else:
+            batch_bonus = 10  # Other accelerators = still a good timing signal
+        return min(base + batch_bonus, 100)
+
+    return base
 
 
 # ── Composite scoring ────────────────────────────────────────
