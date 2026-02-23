@@ -1,18 +1,34 @@
 services:
   - type: web
-    name: scout-api
+    name: precognition-api
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/stats
     envVars:
+      # Database (Turso — required for production)
       - key: TURSO_DATABASE_URL
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
+
+      # Scraping
       - key: GITHUB_TOKEN
         sync: false
-      - key: PH_API_TOKEN
+
+      # Embeddings (OpenAI — required for theme clustering)
+      - key: OPENAI_API_KEY
         sync: false
+
+      # Enrichment (optional — activates Twitter + LinkedIn enrichment)
+      - key: APIFY_API_TOKEN
+        sync: false
+      - key: PROXYCURL_API_KEY
+        sync: false
+      - key: ENRICHMENT_SCORE_THRESHOLD
+        value: "75"
+
+      # Alerts (optional)
       - key: SLACK_WEBHOOK_URL
         sync: false
       - key: SMTP_USER
@@ -21,4 +37,7 @@ services:
         sync: false
       - key: ALERT_EMAIL_TO
         sync: false
-    healthCheckPath: /api/stats
+
+      # Scoring
+      - key: ALERT_SCORE_THRESHOLD
+        value: "85"
