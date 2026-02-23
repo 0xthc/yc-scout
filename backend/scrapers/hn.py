@@ -81,26 +81,32 @@ def _time_ago(ts):
     return f"{hours}h ago" if hours > 0 else "just now"
 
 
-def scrape_hn(conn, search_terms=None):
+def scrape_hn(conn, search_terms=None, num_days=90):
     """
     Scrape HN for founder signals.
 
     Args:
         conn: SQLite connection
         search_terms: Optional list of search queries. Defaults to startup-related terms.
+        num_days: How far back to search (default 90 days).
 
     Returns:
         Number of founders processed.
     """
     if search_terms is None:
-        search_terms = ["", "API", "AI", "infrastructure", "SaaS", "open source"]
+        search_terms = [
+            "", "API", "AI", "infrastructure", "SaaS", "open source",
+            "developer tools", "devtools", "startup", "launch",
+            "B2B", "fintech", "healthtech", "marketplace", "platform",
+            "database", "security", "analytics", "ML",
+        ]
 
     seen_users = set()
     processed = 0
 
     for term in search_terms:
         try:
-            hits = _algolia_search(term)
+            hits = _algolia_search(term, num_days=num_days)
         except httpx.HTTPError as e:
             logger.warning("Algolia search failed for '%s': %s", term, e)
             continue
