@@ -82,6 +82,39 @@ def _time_ago(ts):
     return f"{hours}h ago" if hours > 0 else "just now"
 
 
+def _build_incubator_queries():
+    """Generate incubator search queries with batch codes based on current date.
+
+    YC runs two batches per year:
+      - Winter (W): applications ~Sep, batch Jan-Mar, Demo Day ~Mar
+      - Summer (S): applications ~Mar, batch Jun-Aug, Demo Day ~Aug
+
+    We search for the current batch and the two most recent past batches,
+    so the list stays fresh automatically.
+    """
+    now = datetime.now(timezone.utc)
+    year_short = now.year % 100  # e.g. 26
+
+    # Current and recent YC batch codes (last 3 batches to cover ~18 months)
+    if now.month <= 6:
+        # Jan-Jun: current batch is W{year}, recent are S{year-1}, W{year-1}
+        batches = [f"W{year_short}", f"S{year_short - 1}", f"W{year_short - 1}"]
+    else:
+        # Jul-Dec: current batch is S{year}, recent are W{year}, S{year-1}
+        batches = [f"S{year_short}", f"W{year_short}", f"S{year_short - 1}"]
+
+    queries = [("Launch YC", "story")]
+    for batch in batches:
+        queries.append((f"YC {batch}", "story"))
+
+    queries.extend([
+        ("500 Startups", "story"),
+        ("500 Global", "story"),
+        ("Plug and Play", "story"),
+    ])
+    return queries
+
+
 def scrape_hn(conn, search_terms=None, num_days=90):
     """
     Scrape HN for founder signals.
@@ -102,17 +135,10 @@ def scrape_hn(conn, search_terms=None, num_days=90):
             "database", "security", "analytics", "ML",
         ]
 
-    # Also search for "Launch YC" and incubator-related posts (story tag, not just show_hn)
-    incubator_queries = [
-        ("Launch YC", "story"),
-        ("YC W25", "story"),
-        ("YC S25", "story"),
-        ("YC W26", "story"),
-        ("YC S26", "story"),
-        ("500 Startups", "story"),
-        ("500 Global", "story"),
-        ("Plug and Play", "story"),
-    ]
+    # Also search for "Launch YC" and incubator-related posts (story tag, not just show_hn).
+    # Batch codes are computed dynamically from the current date so they never go stale.
+    # YC runs Winter (W, Jan-Mar) and Summer (S, Jun-Aug) batches.
+    incubator_queries = _build_incubator_queries()
 
     seen_users = set()
     processed = 0
