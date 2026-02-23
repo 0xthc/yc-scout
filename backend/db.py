@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS founders (
     status          TEXT DEFAULT 'to_contact'
                     CHECK(status IN ('to_contact','watching','contacted','pass')),
     yc_alumni_connections INTEGER DEFAULT 0,
+    incubator       TEXT DEFAULT '',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -311,6 +312,12 @@ def _migrate_scores_columns(conn):
             conn.execute(f"ALTER TABLE scores RENAME COLUMN {old_name} TO {new_name}")
         except Exception:
             pass  # Column already renamed, doesn't exist, or table is new
+
+    # Add incubator column if missing
+    try:
+        conn.execute("ALTER TABLE founders ADD COLUMN incubator TEXT DEFAULT ''")
+    except Exception:
+        pass  # Column already exists
 
 
 # ── Data helpers ─────────────────────────────────────────────

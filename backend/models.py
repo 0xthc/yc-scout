@@ -14,6 +14,7 @@ class FounderOut(BaseModel):
     founded: str
     status: str
     yc_alumni_connections: int
+    incubator: str
     sources: list[str]
     tags: list[str]
     score: int

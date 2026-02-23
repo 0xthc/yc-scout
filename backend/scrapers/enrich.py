@@ -16,6 +16,7 @@ import httpx
 
 from backend.config import GITHUB_TOKEN, PH_API_TOKEN
 from backend.db import add_signal, add_source, add_tags, save_stats
+from backend.incubators import detect_incubator, format_incubator
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,11 @@ def _enrich_from_github(conn, fid, username):
         profile_url=profile.get("html_url", ""),
     )
 
+    # Check bio for incubator affiliation
+    bio = profile.get("bio") or ""
+    inc_name, inc_batch = detect_incubator(bio)
+    incubator_str = format_incubator(inc_name, inc_batch)
+
     # Fetch repos for signals
     repos = _gh_get(f"/users/{username}/repos", {
         "sort": "updated", "per_page": 100, "type": "owner",
@@ -101,6 +107,31 @@ def _enrich_from_github(conn, fid, username):
 
         for topic in r.get("topics", []):
             tags.add(topic)
+
+        # Check repo description for incubator mentions
+        if not incubator_str:
+            desc = r.get("description") or ""
+            inc_name, inc_batch = detect_incubator(desc)
+            incubator_str = format_incubator(inc_name, inc_batch)
+
+    # Check topics for incubator affiliation
+    if not incubator_str:
+        incubator_topics = {
+            "ycombinator": "YC", "yc": "YC", "y-combinator": "YC",
+            "500startups": "500 Global", "500-startups": "500 Global",
+            "plugandplay": "Plug and Play", "plug-and-play": "Plug and Play",
+        }
+        for topic in tags:
+            if topic.lower() in incubator_topics:
+                incubator_str = incubator_topics[topic.lower()]
+                break
+
+    if incubator_str:
+        conn.execute(
+            "UPDATE founders SET incubator = ? WHERE id = ? AND (incubator IS NULL OR incubator = '')",
+            (incubator_str, fid),
+        )
+        tags.add(incubator_str.lower().replace(" ", "-"))
 
     if tags:
         add_tags(conn, fid, list(tags)[:10])
