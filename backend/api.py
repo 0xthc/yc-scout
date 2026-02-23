@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="SCOUT API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Precognition API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

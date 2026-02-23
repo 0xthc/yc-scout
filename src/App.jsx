@@ -143,8 +143,8 @@ function TopNav({ view, setView, stats }) {
             background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 14,
-          }}>🔭</div>
-          <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: "-0.02em" }}>Scout</span>
+          }}>🔮</div>
+          <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: "-0.02em" }}>Precognition</span>
           <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 500 }}>· VC Intelligence</span>
         </div>
 
