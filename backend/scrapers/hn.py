@@ -144,6 +144,21 @@ def scrape_hn(conn, search_terms=None, num_days=90):
     seen_users = set()
     processed = 0
 
+    # Skip HN users already scraped within the last 24h — same principle as GitHub:
+    # profile data doesn't change that fast, no need to re-fetch every hour.
+    cutoff_ts = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    recently_scraped = set(
+        row[0]
+        for row in conn.execute(
+            """SELECT s.source_id FROM founders f
+               JOIN sources s ON s.founder_id = f.id
+               WHERE s.platform = 'hn' AND f.updated_at > ?""",
+            (cutoff_ts,),
+        ).fetchall()
+        if row[0]
+    )
+    logger.info("Skipping %d HN founders updated in last 24h", len(recently_scraped))
+
     # Phase A: Show HN posts with startup search terms
     for term in search_terms:
         try:
@@ -157,6 +172,10 @@ def scrape_hn(conn, search_terms=None, num_days=90):
             if not author or author in seen_users:
                 continue
             seen_users.add(author)
+
+            # Skip full Firebase round-trip if we already have fresh data
+            if author in recently_scraped:
+                continue
 
             try:
                 user_data = _firebase_user(author)

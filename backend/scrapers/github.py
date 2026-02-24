@@ -136,6 +136,23 @@ def scrape_github(conn, search_queries=None, num_days=90):
     seen_users = set()
     processed = 0
 
+    # Pre-load recently scraped GitHub handles to skip re-fetching their profiles.
+    # Founders updated within the last 24h don't need a fresh API round-trip —
+    # the signals and stats are still current. This prevents rate limit exhaustion
+    # when the DB has hundreds of founders and the pipeline runs every hour.
+    cutoff_ts = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    recently_scraped = set(
+        row[0].lstrip("@")
+        for row in conn.execute(
+            """SELECT f.handle FROM founders f
+               JOIN sources s ON s.founder_id = f.id
+               WHERE s.platform = 'github' AND f.updated_at > ?""",
+            (cutoff_ts,),
+        ).fetchall()
+        if row[0]
+    )
+    logger.info("Skipping %d GitHub founders updated in last 24h", len(recently_scraped))
+
     for i, query in enumerate(search_queries):
         # GitHub Search API limit: 30 req/min authenticated.
         # Sleep 2.5s between queries to stay safely under the cap.
@@ -153,6 +170,10 @@ def scrape_github(conn, search_queries=None, num_days=90):
             if not username or username in seen_users or owner.get("type") == "Organization":
                 continue
             seen_users.add(username)
+
+            # Skip full API round-trip if we already have fresh data for this user
+            if username in recently_scraped:
+                continue
 
             try:
                 profile = _user_profile(username)
