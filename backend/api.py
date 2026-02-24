@@ -4,6 +4,7 @@ Also exposes endpoints to trigger pipeline runs and update founder status.
 """
 
 import logging
+import os
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ from backend.models import FounderOut, PaginatedFounders, PipelineResult, Status
 from backend.pipeline import run_pipeline
 
 logger = logging.getLogger(__name__)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # Simple in-memory cache to avoid hammering Turso on health checks + polling
 _cache = {}
@@ -169,6 +171,49 @@ def _execute_batch(conn, queries):
     if isinstance(conn, _TursoConnection):
         return conn.execute_batch(queries)
     return [conn.execute(sql, params or []) for sql, params in queries]
+
+
+def _generate_theme_description(theme_name: str, founders: list[dict]) -> str:
+    """Generate a 3-4 sentence qualitative description for a theme cluster."""
+    if not OPENAI_API_KEY:
+        return ""
+
+    snippets = []
+    for founder in founders[:5]:
+        bio = (founder.get("bio") or "").strip()
+        if bio:
+            snippets.append(bio.replace("\n", " ").strip())
+        else:
+            fallback = " - ".join(
+                p for p in [founder.get("name"), founder.get("domain")] if p
+            ).strip()
+            if fallback:
+                snippets.append(fallback)
+
+    founder_lines = "\n".join(f"- {s}" for s in snippets[:5]) if snippets else "- (No founder bios available)"
+    prompt = (
+        f"You are a VC analyst. This is an emerging theme cluster called '{theme_name}'. "
+        f"It has {len(founders)} founders building independently in the same space. "
+        "Here are brief descriptions of some of them:\n"
+        f"{founder_lines}\n\n"
+        "Write a sharp 3-4 sentence qualitative description of this theme for a VC. "
+        "What problem space is forming? Why is it interesting now? "
+        "What signal does this cluster represent? Be specific, not generic. No hype words."
+    )
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=220,
+            temperature=0.4,
+        )
+        return (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        logger.warning("Failed to generate theme description for '%s': %s", theme_name, e)
+        return ""
 
 
 def _build_founders_batch(conn, rows):
@@ -401,8 +446,10 @@ def list_themes():
                 "builderCount": t["builder_count"],
                 "weeklyVelocity": t["weekly_velocity"],
                 "painSummary": t["pain_summary"],
+                "description": t["pain_summary"],
                 "unlockSummary": t["unlock_summary"],
                 "founderOrigin": t["founder_origin"],
+                "sector": t["sector"] if "sector" in t.keys() else "",
                 "firstDetected": t["first_detected"],
                 "updatedAt": t["updated_at"],
                 "founders": [
@@ -438,17 +485,31 @@ def get_theme(theme_id: int):
             (theme_id,),
         ).fetchall()
 
+        founder_dicts = _build_founders_batch(conn, founders)
+        pain_summary = (t["pain_summary"] or "").strip()
+        if not pain_summary and OPENAI_API_KEY:
+            generated = _generate_theme_description(t["name"], founder_dicts)
+            if generated:
+                conn.execute(
+                    "UPDATE themes SET pain_summary = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (generated, theme_id),
+                )
+                pain_summary = generated
+                _cache.pop("themes", None)
+
         return {
             "id": t["id"],
             "name": t["name"],
             "emergenceScore": t["emergence_score"],
             "builderCount": t["builder_count"],
             "weeklyVelocity": t["weekly_velocity"],
-            "painSummary": t["pain_summary"],
+            "painSummary": pain_summary,
+            "description": pain_summary,
             "unlockSummary": t["unlock_summary"],
             "founderOrigin": t["founder_origin"],
+            "sector": t["sector"] if "sector" in t.keys() else "",
             "firstDetected": t["first_detected"],
-            "founders": _build_founders_batch(conn, founders),
+            "founders": founder_dicts,
         }
 
 

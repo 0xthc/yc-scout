@@ -177,19 +177,33 @@ function TopNav({ view, setView, stats }) {
 // ── THEMES VIEW ───────────────────────────────────────────────
 
 function ThemeCard({ theme, onClick }) {
+  const [hovered, setHovered] = useState(false);
   const vel = theme.weeklyVelocity || 0;
   const velPct = (vel * 100).toFixed(0);
   const velColor = vel > 0 ? C.green : vel < 0 ? C.red : C.textMuted;
 
   return (
-    <Card style={{ padding: 20, cursor: "pointer", transition: "box-shadow 0.15s" }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = C.shadowMd}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = C.shadow}
-      onClick={() => onClick(theme)}>
-
+    <Card
+      style={{
+        padding: 20,
+        cursor: "pointer",
+        transition: "box-shadow 0.15s, border-color 0.15s, background-color 0.15s",
+        boxShadow: hovered ? C.shadowMd : C.shadow,
+        borderColor: hovered ? "#bbb" : C.border,
+        background: hovered ? "#fafaf8" : C.surface,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => onClick(theme)}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
           <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: C.text }}>{theme.name}</h3>
+          {theme.sector && (
+            <div style={{ marginBottom: 6 }}>
+              <Badge color="#666" bg="#f4f4f1" border="#e0e0dc">{theme.sector}</Badge>
+            </div>
+          )}
           <div style={{ fontSize: 12, color: C.textMuted }}>First detected {new Date(theme.firstDetected).toLocaleDateString()}</div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -198,7 +212,6 @@ function ThemeCard({ theme, onClick }) {
         </div>
       </div>
 
-      {/* Stats row */}
       <div style={{ display: "flex", gap: 16, marginBottom: 14, padding: "10px 0", borderTop: `1px solid ${C.borderLight}`, borderBottom: `1px solid ${C.borderLight}` }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "ui-monospace, monospace" }}>{theme.builderCount}</div>
@@ -210,7 +223,6 @@ function ThemeCard({ theme, onClick }) {
         </div>
       </div>
 
-      {/* Identity fields */}
       {theme.painSummary && (
         <div style={{ marginBottom: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: C.textSub }}>Pain: </span>
@@ -224,7 +236,6 @@ function ThemeCard({ theme, onClick }) {
         </div>
       )}
 
-      {/* Founder avatars */}
       {theme.founders?.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           {theme.founders.slice(0, 5).map(f => (
@@ -241,6 +252,9 @@ function ThemeCard({ theme, onClick }) {
           )}
         </div>
       )}
+      <div style={{ fontSize: 11, color: C.textMuted, textAlign: "right", marginTop: 10 }}>
+        View founders →
+      </div>
     </Card>
   );
 }
@@ -248,7 +262,14 @@ function ThemeCard({ theme, onClick }) {
 function ThemesView() {
   const [themes, setThemes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedThemeId, setSelectedThemeId] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [selectedLoading, setSelectedLoading] = useState(false);
+
+  const cleanHandle = (handle = "") => handle.replace(/^@/, "");
+  const truncate = (text = "", max = 50) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  const selectedThemeName = selected?.name || themes.find(t => t.id === selectedThemeId)?.name || "";
+  const encodedThemeName = encodeURIComponent(selectedThemeName);
 
   useEffect(() => {
     fetch(`${API}/api/themes`).then(r => r.json()).then(data => {
@@ -257,6 +278,19 @@ function ThemesView() {
     }).catch(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!selectedThemeId) {
+      setSelected(null);
+      setSelectedLoading(false);
+      return;
+    }
+    setSelectedLoading(true);
+    fetch(`${API}/api/themes/${selectedThemeId}`)
+      .then(r => r.json())
+      .then(data => setSelected(data))
+      .finally(() => setSelectedLoading(false));
+  }, [selectedThemeId]);
+
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>Loading themes…</div>;
 
   if (themes.length === 0) return (
@@ -264,27 +298,145 @@ function ThemesView() {
       sub="Run the pipeline with 20+ founders to detect emerging clusters" />
   );
 
-  if (selected) return (
+  if (selectedThemeId) return (
     <div style={{ height: "100%", overflowY: "auto" }}>
-      <div style={{ padding: "20px 24px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={() => setSelected(null)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.textSub, cursor: "pointer", fontSize: 13 }}>← Back</button>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>{selected.name}</h2>
-        <ScorePill score={selected.emergenceScore} />
-        <Badge color={C.green} bg={C.greenLight} border="#a7f3d0">{selected.builderCount} builders</Badge>
+      <div style={{ padding: "20px 24px", borderBottom: `1px solid ${C.border}` }}>
+        <button
+          onClick={() => setSelectedThemeId(null)}
+          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.textSub, cursor: "pointer", fontSize: 13, marginBottom: 12 }}
+        >
+          ← Patterns
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <h2 style={{ margin: 0, fontSize: 30, fontWeight: 800, color: C.text }}>{selected?.name || selectedThemeName}</h2>
+          {selected?.sector && <Badge color="#666" bg="#f4f4f1" border="#e0e0dc">{selected.sector}</Badge>}
+          {selected && <ScorePill score={selected.emergenceScore} />}
+          {selected && <Badge color={C.green} bg={C.greenLight} border="#a7f3d0">{selected.builderCount} builders</Badge>}
+          {selected?.weeklyVelocity > 0 && (
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.green }}>
+              ↑ {(selected.weeklyVelocity * 100).toFixed(0)}% this week
+            </span>
+          )}
+        </div>
       </div>
-      <div style={{ padding: 24, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-        {selected.founders?.map(f => (
-          <Card key={f.id} style={{ padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{f.company || f.name}</div>
-                <div style={{ fontSize: 12, color: C.textMuted }}>{f.name} · {f.domain}</div>
-              </div>
-              <ScorePill score={f.score} size="sm" />
-            </div>
-            <p style={{ margin: 0, fontSize: 12, color: C.textSub, lineHeight: 1.5 }}>{f.bio}</p>
+
+      <div style={{ padding: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
+          <Card style={{ padding: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>What this pattern represents</div>
+            {selectedLoading && (
+              <div style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic" }}>Generating analysis...</div>
+            )}
+            {!selectedLoading && selected?.description && (
+              <p style={{ margin: 0, fontSize: 13, color: C.textSub, lineHeight: 1.55 }}>{selected.description}</p>
+            )}
+            {!selectedLoading && !selected?.description && (
+              <div style={{ fontSize: 13, color: C.textMuted }}>Analysis pending next pipeline run</div>
+            )}
           </Card>
-        ))}
+
+          <Card style={{ padding: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>Explore this theme</div>
+            {[
+              { label: "Search TechCrunch", href: `https://techcrunch.com/search/${encodedThemeName}` },
+              { label: "Search Google News", href: `https://news.google.com/search?q=${encodedThemeName}` },
+              { label: "Search Crunchbase", href: `https://www.crunchbase.com/textsearch?q=${encodedThemeName}` },
+            ].map(link => (
+              <a
+                key={link.label}
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: "block", fontSize: 12, color: "#2050a0", marginBottom: 8, textDecoration: "none" }}
+                onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
+                onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
+              >
+                {link.label} →
+              </a>
+            ))}
+          </Card>
+        </div>
+
+        <div style={{ marginBottom: 10, fontSize: 16, fontWeight: 700, color: C.text }}>
+          Founders in this cluster ({selected?.founders?.length || 0})
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
+          {selected?.founders?.map(f => {
+            const hnSignals = (f.signals || []).filter(s => s.type === "hn").slice(0, 2);
+            return (
+              <Card key={f.id} style={{ padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 0 }}>
+                    {f.name}{f.handle ? ` (${f.handle})` : ""}
+                  </div>
+                  <ScorePill score={f.score} size="sm" />
+                </div>
+                <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>{f.company || f.domain || "Independent builder"}</div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: C.textSub,
+                    lineHeight: 1.5,
+                    marginBottom: 10,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {f.bio}
+                </div>
+                <div style={{ marginBottom: hnSignals.length ? 8 : 0 }}>
+                  {(f.sources || []).map(source => {
+                    if (source === "github" && f.handle) {
+                      return (
+                        <a
+                          key={`${f.id}-github`}
+                          href={`https://github.com/${cleanHandle(f.handle)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ fontSize: 11, color: "#2050a0", textDecoration: "none", marginRight: 8 }}
+                        >
+                          GitHub →
+                        </a>
+                      );
+                    }
+                    if (source === "hn" && f.handle) {
+                      return (
+                        <a
+                          key={`${f.id}-hn`}
+                          href={`https://news.ycombinator.com/user?id=${cleanHandle(f.handle)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ fontSize: 11, color: "#2050a0", textDecoration: "none", marginRight: 8 }}
+                        >
+                          HN →
+                        </a>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+                {hnSignals.length > 0 && (
+                  <div>
+                    {hnSignals.map((signal, idx) => (
+                      <a
+                        key={`${f.id}-hn-signal-${idx}`}
+                        href={signal.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: 11, color: "#2050a0", textDecoration: "none", marginRight: 8 }}
+                        title={signal.label}
+                      >
+                        {truncate(signal.label || "HN signal", 50)} →
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -296,7 +448,7 @@ function ThemesView() {
         <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Clusters of unrelated founders independently building in the same direction</p>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
-        {themes.map(t => <ThemeCard key={t.id} theme={t} onClick={setSelected} />)}
+        {themes.map(t => <ThemeCard key={t.id} theme={t} onClick={(theme) => setSelectedThemeId(theme.id)} />)}
       </div>
     </div>
   );
