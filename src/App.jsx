@@ -124,9 +124,9 @@ function EmptyState({ title, sub }) {
 
 // ── Nav ───────────────────────────────────────────────────────
 
-const VIEWS = ["raw", "field", "patterns", "breaks", "pulse"];
-const VIEW_LABELS = { raw: "Raw", field: "Field", patterns: "Patterns", breaks: "Breaks", pulse: "Pulse" };
-const VIEW_ICONS = { raw: "", field: "", patterns: "", breaks: "", pulse: "" };
+const VIEWS = ["raw", "field", "patterns", "breaks"];
+const VIEW_LABELS = { raw: "Raw", field: "Field", patterns: "Patterns", breaks: "Breaks" };
+const VIEW_ICONS = { raw: "", field: "", patterns: "", breaks: "" };
 
 function TopNav({ view, setView, stats }) {
   return (
@@ -1001,7 +1001,6 @@ export default function App() {
         {view === "field" && <ScoutingView />}
         {view === "patterns" && <ThemesView />}
         {view === "breaks" && <EmergenceView />}
-        {view === "pulse" && <MarketView />}
       </div>
     </div>
   );
