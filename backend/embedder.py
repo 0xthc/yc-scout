@@ -184,10 +184,17 @@ def embed_all_founders(conn) -> int:
             continue
         chash = _content_hash(text)
         existing = conn.execute(
-            "SELECT content_hash FROM founder_embeddings WHERE founder_id = ?", (fid,)
+            "SELECT content_hash, vector FROM founder_embeddings WHERE founder_id = ?", (fid,)
         ).fetchone()
         if existing and existing["content_hash"] == chash:
-            continue
+            # Also check dimension — old TF-IDF embeddings are wrong size, force re-embed
+            blob = existing["vector"]
+            if isinstance(blob, str):
+                import base64
+                blob = base64.b64decode(blob)
+            if len(blob) == EMBEDDING_DIM * 4:
+                continue  # correct dimension, skip
+        to_embed.append((fid, text, chash))
         to_embed.append((fid, text, chash))
 
     if not to_embed:
