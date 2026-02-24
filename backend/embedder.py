@@ -66,8 +66,11 @@ def _serialize(vec: np.ndarray) -> bytes:
     return struct.pack(f"{len(vec)}f", *vec.tolist())
 
 
-def _deserialize(blob: bytes) -> np.ndarray:
-    """Deserialize bytes back to float32 numpy array."""
+def _deserialize(blob) -> np.ndarray:
+    """Deserialize bytes (or base64 str from Turso) back to float32 numpy array."""
+    if isinstance(blob, str):
+        import base64
+        blob = base64.b64decode(blob)
     n = len(blob) // 4
     return np.array(struct.unpack(f"{n}f", blob), dtype=np.float32)
 
