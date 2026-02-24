@@ -98,61 +98,36 @@ def scrape_github(conn, search_queries=None, num_days=90):
     """
     if search_queries is None:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=num_days)).strftime("%Y-%m-%d")
-        # 30-day window for slightly-more-established early-stage repos
+        # 30-day window for early-stage repos
         early_cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-        # 7-day window for very fresh repos (low bar — recency is the signal)
-        fresh_cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+        # GitHub Search API: 30 req/min authenticated — keep total queries ≤ 25
         search_queries = [
-            # ── Established repos with traction (90-day window) ──────────────
-            f"stars:>100 pushed:>{cutoff} topic:api",
-            f"stars:>100 pushed:>{cutoff} topic:saas",
-            f"stars:>100 pushed:>{cutoff} topic:ai",
-            f"stars:>100 pushed:>{cutoff} topic:infrastructure",
+            # ── Established repos (90-day window, higher bar) ─────────────────
+            f"stars:>50 pushed:>{cutoff} topic:ai",
+            f"stars:>50 pushed:>{cutoff} topic:llm",
+            f"stars:>50 pushed:>{cutoff} topic:agents",
             f"stars:>50 pushed:>{cutoff} topic:devtools",
-            f"stars:>50 pushed:>{cutoff} topic:developer-tools",
-            f"stars:>50 pushed:>{cutoff} topic:fintech",
-            f"stars:>50 pushed:>{cutoff} topic:healthtech",
+            f"stars:>50 pushed:>{cutoff} topic:infrastructure",
             f"stars:>50 pushed:>{cutoff} topic:database",
+            f"stars:>50 pushed:>{cutoff} topic:saas",
+            f"stars:>50 pushed:>{cutoff} topic:fintech",
             f"stars:>50 pushed:>{cutoff} topic:security",
             f"stars:>50 pushed:>{cutoff} topic:analytics",
-            f"stars:>50 pushed:>{cutoff} topic:machine-learning",
-            f"stars:>50 pushed:>{cutoff} topic:cli",
-            f"stars:>50 pushed:>{cutoff} topic:platform",
-            f"stars:>30 pushed:>{cutoff} topic:b2b",
-            f"stars:>30 pushed:>{cutoff} topic:marketplace",
-            # Expanded verticals (90-day window)
-            f"stars:>30 pushed:>{cutoff} topic:llm",
-            f"stars:>30 pushed:>{cutoff} topic:agents",
             f"stars:>30 pushed:>{cutoff} topic:automation",
-            f"stars:>30 pushed:>{cutoff} topic:workflow",
-            f"stars:>30 pushed:>{cutoff} topic:consumer",
-            f"stars:>20 pushed:>{cutoff} topic:climate",
-            f"stars:>20 pushed:>{cutoff} topic:vertical-saas",
-            f"stars:>20 pushed:>{cutoff} topic:open-source",
-            f"stars:>20 pushed:>{cutoff} topic:no-code",
-            # ── Early-stage: 30-day window, lower bar ────────────────────────
-            # 10+ stars in 30 days = real traction for a brand-new project
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:api",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:saas",
+            f"stars:>30 pushed:>{cutoff} topic:b2b",
+            f"stars:>30 pushed:>{cutoff} topic:healthtech",
+            f"stars:>30 pushed:>{cutoff} topic:marketplace",
+            # ── Early-stage: 30-day window, lower bar ─────────────────────────
+            # 10+ stars in 30 days for a new repo = real developer interest
             f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:ai",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:devtools",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:infrastructure",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:fintech",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:database",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:machine-learning",
             f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:llm",
             f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:agents",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:devtools",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:saas",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:infrastructure",
             f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:automation",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:security",
-            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:consumer",
-            # ── Very fresh: 7-day window, minimal bar ────────────────────────
-            # 5+ stars in 7 days = fast-moving new project, worth watching
-            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:ai",
-            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:llm",
-            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:agents",
-            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:saas",
-            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:devtools",
-            # ── Incubator-affiliated repos ────────────────────────────────────
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:fintech",
+            # ── Incubator-affiliated ───────────────────────────────────────────
             f"stars:>5 pushed:>{cutoff} topic:ycombinator",
             f"stars:>5 pushed:>{cutoff} topic:yc",
             f"stars:>5 pushed:>{cutoff} topic:500startups",
@@ -161,7 +136,11 @@ def scrape_github(conn, search_queries=None, num_days=90):
     seen_users = set()
     processed = 0
 
-    for query in search_queries:
+    for i, query in enumerate(search_queries):
+        # GitHub Search API limit: 30 req/min authenticated.
+        # Sleep 2.5s between queries to stay safely under the cap.
+        if i > 0:
+            time.sleep(2.5)
         try:
             repos = _search_repos(query)
         except httpx.HTTPError as e:
