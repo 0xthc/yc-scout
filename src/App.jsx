@@ -124,9 +124,9 @@ function EmptyState({ title, sub }) {
 
 // ── Nav ───────────────────────────────────────────────────────
 
-const VIEWS = ["themes", "emergence", "pulse", "scouting"];
-const VIEW_LABELS = { themes: "Themes", emergence: "Emergence", pulse: "Pulse", scouting: "Scouting" };
-const VIEW_ICONS = { themes: "", emergence: "", pulse: "", scouting: "" };
+const VIEWS = ["raw", "field", "patterns", "breaks", "pulse"];
+const VIEW_LABELS = { raw: "Raw", field: "Field", patterns: "Patterns", breaks: "Breaks", pulse: "Pulse" };
+const VIEW_ICONS = { raw: "", field: "", patterns: "", breaks: "", pulse: "" };
 
 function TopNav({ view, setView, stats }) {
   return (
@@ -292,7 +292,7 @@ function ThemesView() {
   return (
     <div style={{ padding: 24, overflowY: "auto", height: "100%" }}>
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Emerging Themes</h2>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Patterns</h2>
         <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Clusters of unrelated founders independently building in the same direction</p>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
@@ -370,7 +370,7 @@ function EmergenceView() {
   return (
     <div style={{ padding: 24, overflowY: "auto", height: "100%" }}>
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Emergence</h2>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Breaks</h2>
         <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>What just crossed a threshold that wasn't on your radar yesterday</p>
       </div>
       <div style={{ display: "grid", gap: 10, maxWidth: 760 }}>
@@ -422,8 +422,8 @@ function PulseView() {
   return (
     <div style={{ padding: 24, overflowY: "auto", height: "100%" }}>
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Pulse</h2>
-        <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Raw signal feed — last 48 hours across all themes and founders</p>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Raw</h2>
+        <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Unfiltered signal feed — last 48 hours, before scoring or clustering</p>
       </div>
       <div style={{ maxWidth: 720 }}>
         {Object.entries(grouped).map(([date, sigs]) => (
@@ -969,10 +969,23 @@ function ScoutingView() {
   );
 }
 
+// ── Market View (Pulse) ───────────────────────────────────────
+
+function MarketView() {
+  return (
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, padding: 40, textAlign: "center" }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: "0.02em" }}>Pulse</div>
+      <div style={{ fontSize: 13, color: C.textMuted, maxWidth: 480, lineHeight: 1.6 }}>
+        Coming soon — fund portfolio signals, investment flow, sector heat maps. Track where capital is moving before it's public.
+      </div>
+    </div>
+  );
+}
+
 // ── Root App ──────────────────────────────────────────────────
 
 export default function App() {
-  const [view, setView] = useState("scouting");
+  const [view, setView] = useState("field");
   const [stats, setStats] = useState({ total: 0, strong: 0, toContact: 0, avgScore: 0 });
 
   useEffect(() => {
@@ -984,10 +997,11 @@ export default function App() {
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: C.bg, color: C.text, fontFamily: "Inter, system-ui, sans-serif" }}>
       <TopNav view={view} setView={setView} stats={stats} />
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {view === "themes" && <ThemesView />}
-        {view === "emergence" && <EmergenceView />}
-        {view === "pulse" && <PulseView />}
-        {view === "scouting" && <ScoutingView />}
+        {view === "raw" && <PulseView />}
+        {view === "field" && <ScoutingView />}
+        {view === "patterns" && <ThemesView />}
+        {view === "breaks" && <EmergenceView />}
+        {view === "pulse" && <MarketView />}
       </div>
     </div>
   );
