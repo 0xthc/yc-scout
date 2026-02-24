@@ -203,11 +203,15 @@ def _encode_arg(val):
         return {"type": "integer", "value": str(val)}
     if isinstance(val, float):
         return {"type": "float", "value": val}
+    if isinstance(val, (bytes, bytearray)):
+        import base64
+        return {"type": "blob", "base64": base64.b64encode(val).decode("ascii")}
     return {"type": "text", "value": str(val)}
 
 
 def _decode_row(raw_row):
     """Decode a row from Turso HTTP API response."""
+    import base64 as _b64
     vals = []
     for cell in raw_row:
         t = cell.get("type", "null")
@@ -217,6 +221,8 @@ def _decode_row(raw_row):
             vals.append(int(cell["value"]))
         elif t == "float":
             vals.append(float(cell["value"]))
+        elif t == "blob":
+            vals.append(_b64.b64decode(cell.get("base64", "")))
         else:
             vals.append(cell.get("value"))
     return vals
