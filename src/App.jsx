@@ -4,26 +4,26 @@ const API = import.meta.env.VITE_API_URL || "";
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
-  bg: "#f8fafc",
+  bg: "#f8f8f6",
   surface: "#ffffff",
-  border: "#e2e8ef",
-  borderLight: "#f1f5f9",
-  text: "#0f172a",
-  textSub: "#64748b",
-  textMuted: "#94a3b8",
-  accent: "#4f46e5",
-  accentLight: "#eef2ff",
-  accentBorder: "#c7d2fe",
-  green: "#059669",
-  greenLight: "#ecfdf5",
-  amber: "#d97706",
-  amberLight: "#fffbeb",
-  red: "#dc2626",
-  redLight: "#fef2f2",
-  blue: "#2563eb",
-  blueLight: "#eff6ff",
-  shadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
-  shadowMd: "0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.04)",
+  border: "#e8e8e5",
+  borderLight: "#f0f0ec",
+  text: "#1a1a1a",
+  textSub: "#666666",
+  textMuted: "#aaaaaa",
+  accent: "#1a1a1a",
+  accentLight: "#f4f4f1",
+  accentBorder: "#e0e0dc",
+  green: "#2d6b2d",
+  greenLight: "#eef5ee",
+  amber: "#a06010",
+  amberLight: "#fff8e8",
+  red: "#a03030",
+  redLight: "#fff0f0",
+  blue: "#2050a0",
+  blueLight: "#eef5ff",
+  shadow: "0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03)",
+  shadowMd: "0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.03)",
 };
 
 const SOURCE = {
@@ -133,27 +133,23 @@ function TopNav({ view, setView, stats }) {
     <header style={{
       background: C.surface, borderBottom: `1px solid ${C.border}`,
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "0 24px", height: 56, flexShrink: 0,
+      padding: "0 18px", height: 48, flexShrink: 0,
     }}>
-      {/* Logo */}
-      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 8,
-            background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
-          }} />
-          <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: "-0.02em" }}>Precognition</span>
-          <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 500 }}>· VC Intelligence</span>
+      {/* Logo + tabs */}
+      <div style={{ display: "flex", alignItems: "center", height: "100%" }}>
+        <div style={{ marginRight: 32 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: "0.05em", textTransform: "uppercase" }}>Precognition</span>
+          <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 400 }}> · VC Intelligence</span>
         </div>
 
         {/* Nav tabs */}
-        <nav style={{ display: "flex", gap: 2 }}>
+        <nav style={{ display: "flex", height: "100%" }}>
           {VIEWS.map(v => (
             <button key={v} onClick={() => setView(v)} style={{
-              padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-              border: "none", cursor: "pointer", transition: "all 0.15s",
-              background: view === v ? C.accentLight : "transparent",
-              color: view === v ? C.accent : C.textSub,
+              padding: "0 16px", fontSize: 12, fontWeight: view === v ? 500 : 400,
+              border: "none", borderBottom: view === v ? `2px solid ${C.text}` : "2px solid transparent",
+              cursor: "pointer", background: "transparent", height: "100%",
+              color: view === v ? C.text : C.textSub, letterSpacing: "0.02em",
             }}>
               {VIEW_LABELS[v]}
             </button>
