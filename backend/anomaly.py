@@ -1,13 +1,5 @@
 """
-Anomaly detection — watches for momentum inflections across founders and themes.
-
-An emergence event fires when:
-  - Commit velocity >= 2x week-over-week
-  - GitHub stars grow > 15 in 24h on a repo with < 100 stars total
-  - HN top score spikes (new post enters top)
-  - A new theme cluster is detected (>= 3 founders converging)
-
-Events are written to the emergence_events table and surfaced via /api/emergence.
+Anomaly detection — watches for momentum inflections across founders.
 """
 
 import logging
@@ -16,9 +8,9 @@ logger = logging.getLogger(__name__)
 
 # Thresholds
 COMMIT_VELOCITY_MULTIPLIER = 2.0   # 2x WoW = anomaly
-STAR_SPIKE_MIN = 15                # stars gained in 24h
-STAR_SPIKE_MAX_BASE = 100          # only flag if total stars < this (pre-discovery)
-HN_SCORE_SPIKE = 100               # new HN post with score > this = spike
+STAR_SPIKE_MIN = 10                # stars gained in 24h
+STAR_SPIKE_MAX_BASE = 300          # only flag if total stars below this base
+HN_SCORE_SPIKE = 50                # new HN post with score > this = spike
 
 
 def _get_prior_snapshot(conn, founder_id: int) -> dict | None:
@@ -91,7 +83,7 @@ def _check_commit_velocity(conn, founder_id: int, latest: dict, prior: dict) -> 
 
 
 def _check_star_spike(conn, founder_id: int, latest: dict, prior: dict) -> None:
-    """Flag repos that gained 15+ stars in 24h while still under 100 total."""
+    """Flag repos that gained stars quickly while still below a capped base."""
     now_stars = latest.get("github_stars", 0) or 0
     prior_stars = prior.get("github_stars", 0) or 0
 
@@ -119,52 +111,30 @@ def _check_hn_spike(conn, founder_id: int, latest: dict, prior: dict) -> None:
             )
 
 
-# ── Theme anomaly checks ─────────────────────────────────────
+def _check_score_threshold(conn, founder_id, latest_score, prior_score):
+    # Fire if composite score just crossed 60 for first time
+    if prior_score is not None and prior_score < 60 and latest_score >= 60:
+        if not _already_fired(conn, founder_id, "founder", "score_threshold", window_hours=168):
+            _fire_event(conn, "score_threshold", founder_id, "founder",
+                f"Score crossed 60 for first time ({prior_score:.0f} -> {latest_score:.0f})",
+                float(prior_score), float(latest_score))
 
 
-def _check_new_themes(conn) -> None:
-    """Flag themes that were created in the last 24h."""
-    new_themes = conn.execute(
-        """SELECT id, name, builder_count FROM themes
-           WHERE first_detected > datetime('now', '-24 hours')""",
+def _check_cross_platform(conn, founder_id):
+    # Fire if founder has both github and hn sources and was created in last 7 days
+    sources = conn.execute(
+        "SELECT DISTINCT source FROM founder_sources WHERE founder_id = ?", (founder_id,)
     ).fetchall()
-
-    for t in new_themes:
-        theme_id = t["id"]
-        if not _already_fired(conn, theme_id, "theme", "new_theme", window_hours=72):
-            _fire_event(
-                conn, "new_theme", theme_id, "theme",
-                f"New theme detected: '{t['name']}' ({t['builder_count']} founders converging)",
-                None, float(t["builder_count"]),
-            )
-
-
-def _check_theme_velocity(conn) -> None:
-    """Flag themes whose builder count grew significantly this week."""
-    themes = conn.execute("SELECT id, name, builder_count FROM themes").fetchall()
-
-    for t in themes:
-        theme_id = t["id"]
-        prior = conn.execute(
-            """SELECT builder_count FROM theme_history
-               WHERE theme_id = ? AND captured_at < datetime('now', '-7 days')
-               ORDER BY captured_at DESC LIMIT 1""",
-            (theme_id,),
+    source_list = [s["source"] for s in sources]
+    if "github" in source_list and "hn" in source_list:
+        founder = conn.execute(
+            "SELECT created_at FROM founders WHERE id = ?", (founder_id,)
         ).fetchone()
-
-        if not prior or not prior["builder_count"]:
-            continue
-
-        current = t["builder_count"] or 0
-        growth = (current - prior["builder_count"]) / prior["builder_count"]
-
-        if growth >= 0.5:  # 50% WoW builder growth
-            if not _already_fired(conn, theme_id, "theme", "theme_spike"):
-                _fire_event(
-                    conn, "theme_spike", theme_id, "theme",
-                    f"Theme '{t['name']}' grew {growth*100:.0f}% WoW ({prior['builder_count']} → {current} builders)",
-                    float(prior["builder_count"]), float(current),
-                )
+        if founder:
+            if not _already_fired(conn, founder_id, "founder", "cross_platform", window_hours=168):
+                _fire_event(conn, "cross_platform", founder_id, "founder",
+                    "Active on both GitHub and HN — cross-platform signal",
+                    None, None)
 
 
 # ── Main entry point ─────────────────────────────────────────
@@ -172,35 +142,38 @@ def _check_theme_velocity(conn) -> None:
 
 def detect_anomalies(conn) -> int:
     """
-    Run all anomaly checks across founders and themes.
+    Run anomaly checks across founders.
     Returns total events fired.
     """
     before = conn.execute("SELECT COUNT(*) as c FROM emergence_events").fetchone()["c"]
 
-    # Per-founder checks
     founders = conn.execute("SELECT id FROM founders").fetchall()
     for f in founders:
         fid = f["id"]
         latest = _get_latest_snapshot(conn, fid)
         if not latest:
             continue
+
         prior = _get_prior_snapshot(conn, fid)
-        if not prior:
-            continue
 
         try:
-            _check_commit_velocity(conn, fid, latest, prior)
-            _check_star_spike(conn, fid, latest, prior)
-            _check_hn_spike(conn, fid, latest, prior)
+            if prior:
+                _check_commit_velocity(conn, fid, latest, prior)
+                _check_star_spike(conn, fid, latest, prior)
+                _check_hn_spike(conn, fid, latest, prior)
+
+            score_rows = conn.execute(
+                "SELECT composite FROM scores WHERE founder_id = ? ORDER BY scored_at DESC LIMIT 2",
+                (fid,),
+            ).fetchall()
+            latest_score = score_rows[0]["composite"] if len(score_rows) >= 1 else None
+            prior_score = score_rows[1]["composite"] if len(score_rows) >= 2 else None
+            if latest_score is not None:
+                _check_score_threshold(conn, fid, latest_score, prior_score)
+
+            _check_cross_platform(conn, fid)
         except Exception as e:
             logger.error("Anomaly check failed for founder %d: %s", fid, e)
-
-    # Theme-level checks
-    try:
-        _check_new_themes(conn)
-        _check_theme_velocity(conn)
-    except Exception as e:
-        logger.error("Theme anomaly check failed: %s", e)
 
     after = conn.execute("SELECT COUNT(*) as c FROM emergence_events").fetchone()["c"]
     fired = after - before
