@@ -712,6 +712,94 @@ function FounderDetail({ founder, onStatusChange, onNotesChange }) {
 
 const PAGE_SIZE = 50;
 
+// ── Archetype classification ──────────────────────────────────
+
+const ARCHETYPES = [
+  {
+    key: "act_now",
+    label: "Act Now",
+    desc: "Score ≥ 85 · not yet contacted",
+    color: C.green,
+    bg: C.greenLight,
+    border: "#a7f3d0",
+    match: f => f.score >= 85 && !["pass", "contacted"].includes(f.status),
+  },
+  {
+    key: "serial",
+    label: "Serial Founders",
+    desc: "Prior company detected",
+    color: C.accent,
+    bg: C.accentLight,
+    border: C.accentBorder,
+    match: f => f.is_serial_founder,
+  },
+  {
+    key: "stealth",
+    label: "Stealth Builders",
+    desc: "High commits · low public profile",
+    color: C.blue,
+    bg: C.blueLight,
+    border: "#bfdbfe",
+    match: f => f.github_commits_90d >= 100 && f.github_stars < 400 && (f.followers || 0) < 1000,
+  },
+  {
+    key: "domain_writer",
+    label: "Domain Writers",
+    desc: "HN-first · high conviction",
+    color: C.amber,
+    bg: C.amberLight,
+    border: "#fde68a",
+    match: f => f.hn_karma >= 1000 && f.github_stars < 300,
+  },
+  {
+    key: "tracking",
+    label: "Tracking",
+    desc: "Everything else",
+    color: C.textSub,
+    bg: C.bg,
+    border: C.border,
+    match: () => true, // catch-all — applied only if no other bucket matched
+  },
+];
+
+function classifyFounder(f) {
+  const matched = ARCHETYPES.slice(0, -1).filter(a => a.match(f));
+  return matched.length > 0 ? matched.map(a => a.key) : ["tracking"];
+}
+
+function ArchetypeSection({ archetype, founders, selected, onSelect, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const { label, desc, color, bg, border } = archetype;
+  if (founders.length === 0) return null;
+  return (
+    <div style={{ borderBottom: `1px solid ${C.borderLight}` }}>
+      {/* Section header */}
+      <button onClick={() => setOpen(o => !o)} style={{
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "8px 16px", background: bg, border: "none", cursor: "pointer",
+        borderBottom: open ? `1px solid ${border}` : "none",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color }}>{label}</span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, color, background: `${color}18`,
+            border: `1px solid ${border}`, borderRadius: 99, padding: "1px 7px",
+            fontFamily: "ui-monospace, monospace",
+          }}>{founders.length}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 10, color: C.textMuted }}>{desc}</span>
+          <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "ui-monospace, monospace" }}>{open ? "−" : "+"}</span>
+        </div>
+      </button>
+      {/* Founders */}
+      {open && founders.map(f => (
+        <FounderRow key={f.id} founder={f} selected={selected?.id === f.id} onClick={onSelect} />
+      ))}
+    </div>
+  );
+}
+
 function ScoutingView() {
   const [founders, setFounders] = useState([]);
   const [total, setTotal] = useState(0);
@@ -719,6 +807,7 @@ function ScoutingView() {
   const [search, setSearch] = useState("");
   const [debSearch, setDebSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [viewMode, setViewMode] = useState("grouped"); // "grouped" | "list"
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const listRef = useRef(null);
@@ -728,12 +817,14 @@ function ScoutingView() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Grouped mode fetches all at once; list mode paginates
   const buildUrl = useCallback((offset = 0) => {
-    const p = new URLSearchParams({ limit: PAGE_SIZE, offset });
+    const limit = viewMode === "grouped" ? 2000 : PAGE_SIZE;
+    const p = new URLSearchParams({ limit, offset });
     if (debSearch) p.set("search", debSearch);
     if (filterStatus !== "all") p.set("status", filterStatus);
     return `${API}/api/founders?${p}`;
-  }, [debSearch, filterStatus]);
+  }, [debSearch, filterStatus, viewMode]);
 
   const fetchFounders = useCallback(async (reset = false) => {
     if (reset) setLoading(true);
@@ -745,25 +836,25 @@ function ScoutingView() {
     } finally { setLoading(false); }
   }, [buildUrl]);
 
-  useEffect(() => { fetchFounders(true); }, [debSearch, filterStatus]);
+  useEffect(() => { fetchFounders(true); }, [debSearch, filterStatus, viewMode]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || founders.length >= total) return;
+    if (viewMode === "grouped" || loadingMore || founders.length >= total) return;
     setLoadingMore(true);
     try {
       const res = await fetch(buildUrl(founders.length));
       const data = await res.json();
       setFounders(prev => [...prev, ...(data.founders || [])]);
     } finally { setLoadingMore(false); }
-  }, [founders.length, total, loadingMore, buildUrl]);
+  }, [founders.length, total, loadingMore, buildUrl, viewMode]);
 
   useEffect(() => {
     const el = listRef.current;
-    if (!el) return;
+    if (!el || viewMode === "grouped") return;
     const fn = () => { if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) loadMore(); };
     el.addEventListener("scroll", fn);
     return () => el.removeEventListener("scroll", fn);
-  }, [loadMore]);
+  }, [loadMore, viewMode]);
 
   const handleStatus = async (id, st) => {
     setFounders(prev => prev.map(f => f.id === id ? { ...f, status: st } : f));
@@ -779,6 +870,16 @@ function ScoutingView() {
     setSelected(prev => prev?.id === id ? { ...prev, notes } : prev);
   };
 
+  // Group founders into archetype buckets
+  const grouped = useCallback(() => {
+    const buckets = Object.fromEntries(ARCHETYPES.map(a => [a.key, []]));
+    founders.forEach(f => {
+      const keys = classifyFounder(f);
+      keys.forEach(k => buckets[k].push(f));
+    });
+    return buckets;
+  }, [founders]);
+
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
       {/* List panel */}
@@ -792,19 +893,37 @@ function ScoutingView() {
               border: `1px solid ${C.border}`, borderRadius: 8,
               background: C.bg, fontSize: 13, color: C.text, outline: "none",
             }} />
-          <div style={{ display: "flex", gap: 4 }}>
-            {["all", ...Object.keys(STATUS)].map(s => {
-              const cfg = STATUS[s];
-              const active = filterStatus === s;
-              return (
-                <button key={s} onClick={() => setFilterStatus(s)} style={{
-                  padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 500,
-                  cursor: "pointer", border: `1px solid ${active ? (cfg?.border || C.accentBorder) : C.border}`,
-                  background: active ? (cfg?.bg || C.accentLight) : C.surface,
-                  color: active ? (cfg?.color || C.accent) : C.textSub,
-                }}>{s === "all" ? "All" : cfg.label}</button>
-              );
-            })}
+          {/* Mode toggle + status filters */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            {/* View mode toggle */}
+            <div style={{ display: "flex", background: C.bg, borderRadius: 7, border: `1px solid ${C.border}`, padding: 2, gap: 2 }}>
+              {[["grouped", "Archetypes"], ["list", "List"]].map(([mode, lbl]) => (
+                <button key={mode} onClick={() => setViewMode(mode)} style={{
+                  padding: "3px 10px", borderRadius: 5, fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", border: "none", transition: "all 0.15s",
+                  background: viewMode === mode ? C.surface : "transparent",
+                  color: viewMode === mode ? C.text : C.textMuted,
+                  boxShadow: viewMode === mode ? C.shadow : "none",
+                }}>{lbl}</button>
+              ))}
+            </div>
+            {/* Status filters (list mode only) */}
+            {viewMode === "list" && (
+              <div style={{ display: "flex", gap: 4 }}>
+                {["all", ...Object.keys(STATUS)].map(s => {
+                  const cfg = STATUS[s];
+                  const active = filterStatus === s;
+                  return (
+                    <button key={s} onClick={() => setFilterStatus(s)} style={{
+                      padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 500,
+                      cursor: "pointer", border: `1px solid ${active ? (cfg?.border || C.accentBorder) : C.border}`,
+                      background: active ? (cfg?.bg || C.accentLight) : C.surface,
+                      color: active ? (cfg?.color || C.accent) : C.textSub,
+                    }}>{s === "all" ? "All" : cfg.label}</button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -813,18 +932,36 @@ function ScoutingView() {
           {total} founders
         </div>
 
-        {/* List */}
+        {/* List / Grouped */}
         <div ref={listRef} style={{ flex: 1, overflowY: "auto" }}>
           {loading ? (
             <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>Loading founders…</div>
           ) : founders.length === 0 ? (
             <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>No founders match filters</div>
+          ) : viewMode === "grouped" ? (
+            // ── Archetype buckets ──
+            (() => {
+              const buckets = grouped();
+              return ARCHETYPES.map((arch, i) => (
+                <ArchetypeSection
+                  key={arch.key}
+                  archetype={arch}
+                  founders={buckets[arch.key]}
+                  selected={selected}
+                  onSelect={setSelected}
+                  defaultOpen={i < 3}
+                />
+              ));
+            })()
           ) : (
-            founders.map(f => (
-              <FounderRow key={f.id} founder={f} selected={selected?.id === f.id} onClick={setSelected} />
-            ))
+            // ── Flat list ──
+            <>
+              {founders.map(f => (
+                <FounderRow key={f.id} founder={f} selected={selected?.id === f.id} onClick={setSelected} />
+              ))}
+              {loadingMore && <div style={{ padding: 12, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading more…</div>}
+            </>
           )}
-          {loadingMore && <div style={{ padding: 12, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading more…</div>}
         </div>
       </div>
 

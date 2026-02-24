@@ -98,10 +98,12 @@ def scrape_github(conn, search_queries=None, num_days=90):
     """
     if search_queries is None:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=num_days)).strftime("%Y-%m-%d")
-        # Early-stage cutoff: repos created in the last 30 days (month 1 projects)
+        # 30-day window for slightly-more-established early-stage repos
         early_cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+        # 7-day window for very fresh repos (low bar — recency is the signal)
+        fresh_cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
         search_queries = [
-            # Established repos with traction (90-day window)
+            # ── Established repos with traction (90-day window) ──────────────
             f"stars:>100 pushed:>{cutoff} topic:api",
             f"stars:>100 pushed:>{cutoff} topic:saas",
             f"stars:>100 pushed:>{cutoff} topic:ai",
@@ -118,18 +120,39 @@ def scrape_github(conn, search_queries=None, num_days=90):
             f"stars:>50 pushed:>{cutoff} topic:platform",
             f"stars:>30 pushed:>{cutoff} topic:b2b",
             f"stars:>30 pushed:>{cutoff} topic:marketplace",
-            # Early-stage: repos created in the last 30 days with real traction.
-            # 25+ stars in <30 days = meaningful signal (not a weekend tutorial).
-            # Also require recent push to filter out abandoned experiments.
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:api",
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:saas",
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:ai",
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:devtools",
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:infrastructure",
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:fintech",
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:database",
-            f"stars:>25 created:>{early_cutoff} pushed:>{early_cutoff} topic:machine-learning",
-            # Incubator-affiliated repos (lower bar — the topic itself is the signal)
+            # Expanded verticals (90-day window)
+            f"stars:>30 pushed:>{cutoff} topic:llm",
+            f"stars:>30 pushed:>{cutoff} topic:agents",
+            f"stars:>30 pushed:>{cutoff} topic:automation",
+            f"stars:>30 pushed:>{cutoff} topic:workflow",
+            f"stars:>30 pushed:>{cutoff} topic:consumer",
+            f"stars:>20 pushed:>{cutoff} topic:climate",
+            f"stars:>20 pushed:>{cutoff} topic:vertical-saas",
+            f"stars:>20 pushed:>{cutoff} topic:open-source",
+            f"stars:>20 pushed:>{cutoff} topic:no-code",
+            # ── Early-stage: 30-day window, lower bar ────────────────────────
+            # 10+ stars in 30 days = real traction for a brand-new project
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:api",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:saas",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:ai",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:devtools",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:infrastructure",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:fintech",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:database",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:machine-learning",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:llm",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:agents",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:automation",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:security",
+            f"stars:>10 created:>{early_cutoff} pushed:>{early_cutoff} topic:consumer",
+            # ── Very fresh: 7-day window, minimal bar ────────────────────────
+            # 5+ stars in 7 days = fast-moving new project, worth watching
+            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:ai",
+            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:llm",
+            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:agents",
+            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:saas",
+            f"stars:>5 created:>{fresh_cutoff} pushed:>{fresh_cutoff} topic:devtools",
+            # ── Incubator-affiliated repos ────────────────────────────────────
             f"stars:>5 pushed:>{cutoff} topic:ycombinator",
             f"stars:>5 pushed:>{cutoff} topic:yc",
             f"stars:>5 pushed:>{cutoff} topic:500startups",
