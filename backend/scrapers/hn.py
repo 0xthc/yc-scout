@@ -35,7 +35,7 @@ SHOW_HN_MIN_POINTS = 50
 STRONG_SIGNAL_POINTS = 200
 
 
-def _algolia_search(query, tags="show_hn", hits_per_page=100, num_days=90):
+def _algolia_search(query, tags="show_hn", hits_per_page=50, num_days=90):
     """Search Algolia HN API with filters."""
     cutoff = int((datetime.now(timezone.utc) - timedelta(days=num_days)).timestamp())
     params = {
@@ -129,18 +129,11 @@ def scrape_hn(conn, search_terms=None, num_days=90):
     """
     if search_terms is None:
         search_terms = [
-            # Broad signals
             "", "API", "AI", "infrastructure", "SaaS", "open source",
             "developer tools", "devtools", "startup", "launch",
-            # B2B verticals
             "B2B", "fintech", "healthtech", "marketplace", "platform",
             "database", "security", "analytics", "ML",
-            # Emerging 2024-2025 spaces
-            "LLM", "agents", "agent", "automation", "workflow",
-            "RAG", "embeddings", "inference", "open-source model",
-            # Consumer & other
-            "consumer", "no-code", "climate", "vertical SaaS",
-            "observability", "data pipeline", "self-hosted",
+            "LLM", "agents", "automation",
         ]
 
     # Also search for "Launch YC" and incubator-related posts (story tag, not just show_hn).
