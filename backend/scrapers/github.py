@@ -145,8 +145,8 @@ def scrape_github(conn, search_queries=None, num_days=90):
         row[0].lstrip("@")
         for row in conn.execute(
             """SELECT f.handle FROM founders f
-               JOIN sources s ON s.founder_id = f.id
-               WHERE s.platform = 'github' AND f.updated_at > ?""",
+               JOIN founder_sources s ON s.founder_id = f.id
+               WHERE s.source = 'github' AND f.updated_at > ?""",
             (cutoff_ts,),
         ).fetchall()
         if row[0]

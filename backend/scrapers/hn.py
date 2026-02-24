@@ -151,8 +151,8 @@ def scrape_hn(conn, search_terms=None, num_days=90):
         row[0]
         for row in conn.execute(
             """SELECT s.source_id FROM founders f
-               JOIN sources s ON s.founder_id = f.id
-               WHERE s.platform = 'hn' AND f.updated_at > ?""",
+               JOIN founder_sources s ON s.founder_id = f.id
+               WHERE s.source = 'hn' AND f.updated_at > ?""",
             (cutoff_ts,),
         ).fetchall()
         if row[0]
