@@ -224,13 +224,30 @@ def embed_all_founders(conn) -> int:
 
 
 def load_embeddings(conn) -> tuple[list[int], np.ndarray]:
-    """Load all stored embeddings. Returns (founder_ids, matrix of shape [N, dim])."""
+    """Load all stored embeddings. Returns (founder_ids, matrix of shape [N, dim]).
+
+    Filters out embeddings with wrong dimensions (e.g. old TF-IDF 22-dim vectors)
+    so clustering always gets a uniform matrix of EMBEDDING_DIM columns.
+    """
     rows = conn.execute(
         "SELECT founder_id, vector FROM founder_embeddings"
     ).fetchall()
     if not rows:
         return [], np.empty((0, EMBEDDING_DIM), dtype=np.float32)
 
-    ids = [r["founder_id"] for r in rows]
-    matrix = np.stack([_deserialize(r["vector"]) for r in rows])
-    return ids, matrix
+    ids, vecs = [], []
+    expected_bytes = EMBEDDING_DIM * 4  # float32 = 4 bytes each
+    for r in rows:
+        blob = r["vector"]
+        if isinstance(blob, str):
+            import base64
+            blob = base64.b64decode(blob)
+        if len(blob) != expected_bytes:
+            continue  # skip stale TF-IDF or wrong-dim embeddings
+        ids.append(r["founder_id"])
+        vecs.append(np.array(struct.unpack(f"{EMBEDDING_DIM}f", blob), dtype=np.float32))
+
+    if not ids:
+        return [], np.empty((0, EMBEDDING_DIM), dtype=np.float32)
+
+    return ids, np.stack(vecs)
