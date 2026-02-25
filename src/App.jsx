@@ -1039,7 +1039,7 @@ function ArchetypeSection({ archetype, founders, selected, onSelect, defaultOpen
   );
 }
 
-function FieldLegend({ total }) {
+function FieldLegend({ total, filtered, scoutLabel }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{ borderBottom: `1px solid ${C.borderLight}` }}>
@@ -1051,7 +1051,12 @@ function FieldLegend({ total }) {
           display: "flex", justifyContent: "space-between", alignItems: "center",
           cursor: "pointer", userSelect: "none",
         }}>
-        <span>{total} companies tracked</span>
+        <span>
+          {filtered !== null
+            ? <><strong style={{ color: C.text }}>{filtered}</strong> matching {scoutLabel} · {total} total</>
+            : <>{total} companies tracked</>
+          }
+        </span>
         <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>
           {open ? "Hide legend ▲" : "Data sources ▼"}
         </span>
@@ -1111,6 +1116,71 @@ function FieldLegend({ total }) {
   );
 }
 
+// ── Scout Modes ─────────────────────────────────────────────────────────────
+const sb = f => f.scoreBreakdown || {};
+
+const SCOUT_MODES = [
+  {
+    key: "all",
+    label: "All",
+    shortDesc: "Default composite score",
+    color: C.textMuted,
+    bg: C.surface,
+    sort: f => f.score || 0,
+    filter: () => true,
+  },
+  {
+    key: "conviction",
+    label: "Conviction",
+    shortDesc: "AI infra · dev tools · velocity + pedigree",
+    color: "#fff",
+    bg: "#111",
+    sort: f => (sb(f).execution_velocity || 0) * 0.5 + (sb(f).founder_quality || 0) * 0.5,
+    filter: f => {
+      const bio = (f.bio || "").toLowerCase();
+      const tags = (f.tags || []).join(" ").toLowerCase();
+      const combo = bio + " " + tags;
+      return ["ai", "llm", "model", "developer tools", "infra", "infrastructure", "ml", "agent"].some(k => combo.includes(k));
+    },
+  },
+  {
+    key: "first_round",
+    label: "First Round",
+    shortDesc: "High pedigree · stealth · not yet raised",
+    color: "#fff",
+    bg: "#b91c1c",
+    sort: f => (sb(f).founder_quality || 0) * 0.7 + (sb(f).deal_availability || 0) * 3,
+    filter: f => (sb(f).deal_availability || 0) >= 5,
+  },
+  {
+    key: "hustle_fund",
+    label: "Hustle Fund",
+    shortDesc: "Velocity only · no pedigree needed · scrappy",
+    color: "#fff",
+    bg: "#ea580c",
+    sort: f => sb(f).execution_velocity || 0,
+    filter: () => true,
+  },
+  {
+    key: "precursor",
+    label: "Precursor",
+    shortDesc: "Absolute earliest · pre-product · stealth",
+    color: "#fff",
+    bg: "#0284c7",
+    sort: f => (sb(f).deal_availability || 0) * 6 + (sb(f).execution_velocity || 0) * 0.4,
+    filter: f => !f.incubator && (sb(f).deal_availability || 0) >= 5,
+  },
+  {
+    key: "spc",
+    label: "SPC",
+    shortDesc: "Exploring founder · high pedigree · no company yet",
+    color: "#fff",
+    bg: "#7c3aed",
+    sort: f => sb(f).founder_quality || 0,
+    filter: f => !f.incubator && (sb(f).founder_quality || 0) >= 10,
+  },
+];
+
 function ScoutingView() {
   const [founders, setFounders] = useState([]);
   const [total, setTotal] = useState(0);
@@ -1119,10 +1189,18 @@ function ScoutingView() {
   const [debSearch, setDebSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [viewMode, setViewMode] = useState("grouped"); // "grouped" | "list"
+  const [scoutModeKey, setScoutModeKey] = useState("all");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const listRef = useRef(null);
+
+  const scoutMode = SCOUT_MODES.find(m => m.key === scoutModeKey) || SCOUT_MODES[0];
+
+  // Apply scout mode filter + sort to any set of founders
+  const applyScout = useCallback((list) => {
+    return [...list].filter(scoutMode.filter).sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
+  }, [scoutMode]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebSearch(search), 300);
@@ -1228,8 +1306,12 @@ function ScoutingView() {
       const keys = classifyFounder(f);
       keys.forEach(k => buckets[k].push(f));
     });
+    // Apply scout mode filter + sort within each bucket
+    Object.keys(buckets).forEach(k => {
+      buckets[k] = applyScout(buckets[k]);
+    });
     return buckets;
-  }, [founders]);
+  }, [founders, applyScout]);
 
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -1244,6 +1326,30 @@ function ScoutingView() {
               border: `1px solid ${C.border}`, borderRadius: 8,
               background: C.bg, fontSize: 13, color: C.text, outline: "none",
             }} />
+          {/* Scout mode selector */}
+          <div>
+            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Scout for</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {SCOUT_MODES.map(m => {
+                const active = scoutModeKey === m.key;
+                return (
+                  <button key={m.key} onClick={() => setScoutModeKey(m.key)} title={m.shortDesc} style={{
+                    padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                    cursor: "pointer", border: active ? "none" : `1px solid ${C.border}`,
+                    background: active ? m.bg : C.surface,
+                    color: active ? m.color : C.textSub,
+                    transition: "all 0.15s",
+                  }}>{m.label}</button>
+                );
+              })}
+            </div>
+            {scoutModeKey !== "all" && (
+              <div style={{ marginTop: 5, fontSize: 10, color: C.textMuted, fontStyle: "italic" }}>
+                {scoutMode.shortDesc}
+              </div>
+            )}
+          </div>
+
           {/* Mode toggle + status filters */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             {/* View mode toggle */}
@@ -1279,7 +1385,11 @@ function ScoutingView() {
         </div>
 
         {/* Count */}
-        <FieldLegend total={total} />
+        <FieldLegend
+          total={total}
+          filtered={scoutModeKey !== "all" ? applyScout(founders).length : null}
+          scoutLabel={scoutModeKey !== "all" ? scoutMode.label : null}
+        />
 
         {/* List / Grouped */}
         <div ref={listRef} style={{ flex: 1, overflowY: "auto" }}>
@@ -1305,7 +1415,7 @@ function ScoutingView() {
           ) : (
             // ── Flat list ──
             <>
-              {founders.map(f => (
+              {applyScout(founders).map(f => (
                 <FounderRow key={f.id} founder={f} selected={selected?.id === f.id} onClick={setSelected} />
               ))}
               {loadingMore && <div style={{ padding: 12, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading more…</div>}
