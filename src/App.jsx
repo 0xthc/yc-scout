@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 const API = import.meta.env.VITE_API_URL || "";
 
@@ -663,39 +663,119 @@ function IncubatorBadge({ label }) {
   );
 }
 
-function FounderRow({ founder, selected, onClick }) {
-  const bio = founder.bio || "";
+// ── Startup Card ────────────────────────────────────────────────────────────
+function StartupCard({ founder: s, selected, onClick }) {
+  const signals = whySurfaced(s);
   return (
-    <div onClick={() => onClick(founder)} style={{
-      padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`,
-      cursor: "pointer", background: selected ? C.accentLight : "transparent",
-      transition: "background 0.1s",
-    }}
+    <div onClick={() => onClick(s)}
       onMouseEnter={e => { if (!selected) e.currentTarget.style.background = C.bg; }}
-      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}>
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = selected ? C.accentLight : "transparent"; }}
+      style={{
+        padding: "14px 18px", borderBottom: `1px solid ${C.borderLight}`,
+        cursor: "pointer", background: selected ? C.accentLight : "transparent",
+        transition: "background 0.1s",
+      }}>
 
-      {/* Row 1: name + badges + score */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {founder.company || founder.name}
+      {/* Company name + incubator badge + score */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {s.company || s.name}
         </span>
-        <IncubatorBadge label={founder.incubator} />
-        <ScorePill score={founder.score} size="sm" />
+        <IncubatorBadge label={s.incubator} />
+        <ScorePill score={s.score} size="sm" />
       </div>
 
-      {/* Row 2: one-liner description */}
-      {bio && (
-        <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.4, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {bio}
+      {/* Product description */}
+      {s.bio && (
+        <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.5, marginBottom: 6 }}>
+          {s.bio}
         </div>
       )}
 
-      {/* Row 3: why surfaced */}
-      <div style={{ fontSize: 11, color: C.textMuted }}>
-        {whySurfaced(founder)}
+      {/* Founder / team line */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: signals ? 5 : 0 }}>
+        {s.location && (
+          <span style={{ fontSize: 11, color: C.textMuted }}>📍 {s.location}</span>
+        )}
+        {s.founded && (
+          <span style={{ fontSize: 11, color: C.textMuted }}>Founded {s.founded}</span>
+        )}
+        {s.stage && s.stage !== "Unknown" && (
+          <span style={{ fontSize: 10, fontWeight: 600, color: C.textSub, background: C.surface, border: `1px solid ${C.borderLight}`, borderRadius: 4, padding: "1px 6px" }}>
+            {s.stage}
+          </span>
+        )}
+      </div>
+
+      {/* Why now */}
+      {signals && (
+        <div style={{ fontSize: 11, color: C.textMuted, fontStyle: "italic" }}>{signals}</div>
+      )}
+    </div>
+  );
+}
+
+// ── Individual / Founder-to-Follow Card ─────────────────────────────────────
+function IndividualCard({ founder: f, selected, onClick }) {
+  const pedigree = f.scoreBreakdown?.founder_quality || 0;
+  const velocity = f.scoreBreakdown?.execution_velocity || 0;
+
+  const backgroundHints = [];
+  const bio = (f.bio || "").toLowerCase();
+  if (bio.includes("yc") || bio.includes("y combinator")) backgroundHints.push("YC");
+  if (bio.includes("openai") || bio.includes("anthropic") || bio.includes("deepmind")) backgroundHints.push("AI lab");
+  if (bio.includes("google") || bio.includes("meta") || bio.includes("stripe") || bio.includes("apple") || bio.includes("amazon")) backgroundHints.push("Big tech");
+  if (bio.includes("phd") || bio.includes("ph.d")) backgroundHints.push("PhD");
+  if (bio.includes("founder") || bio.includes("co-founder")) backgroundHints.push("Founder");
+
+  return (
+    <div onClick={() => onClick(f)}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = C.bg; }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = selected ? C.accentLight : "transparent"; }}
+      style={{
+        padding: "12px 18px", borderBottom: `1px solid ${C.borderLight}`,
+        cursor: "pointer", background: selected ? C.accentLight : "transparent",
+        transition: "background 0.1s",
+      }}>
+
+      {/* Handle + score */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {f.name || f.handle}
+          {f.handle && f.name && f.handle !== f.name && (
+            <span style={{ fontWeight: 400, color: C.textMuted, marginLeft: 5 }}>@{f.handle}</span>
+          )}
+        </span>
+        <ScorePill score={f.score} size="sm" />
+      </div>
+
+      {/* Bio */}
+      {f.bio && (
+        <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.4, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {f.bio}
+        </div>
+      )}
+
+      {/* Background tags + velocity signal */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {backgroundHints.map(h => (
+          <span key={h} style={{ fontSize: 10, fontWeight: 600, color: C.accent, background: C.accentLight, border: `1px solid ${C.accentBorder}`, borderRadius: 4, padding: "1px 5px" }}>{h}</span>
+        ))}
+        {velocity >= 16 && (
+          <span style={{ fontSize: 10, color: C.textMuted }}>
+            {velocity >= 28 ? "Shipping fast" : velocity >= 22 ? "Active builder" : "Building"}
+          </span>
+        )}
       </div>
     </div>
   );
+}
+
+// Kept for detail panel compatibility (same data, just not used in list anymore)
+function FounderRow({ founder, selected, onClick }) {
+  return founder.entityType === "startup"
+    ? <StartupCard founder={founder} selected={selected} onClick={onClick} />
+    : <IndividualCard founder={founder} selected={selected} onClick={onClick} />;
 }
 
 function FounderDetail({ founder, onStatusChange, onNotesChange }) {
@@ -1181,6 +1261,38 @@ const SCOUT_MODES = [
   },
 ];
 
+function SectionHeader({ label, count, subtitle, collapsible, defaultOpen, onToggle }) {
+  return (
+    <div
+      onClick={collapsible ? onToggle : undefined}
+      style={{
+        padding: "10px 18px 8px",
+        background: C.surface,
+        borderBottom: `1px solid ${C.border}`,
+        borderTop: `1px solid ${C.border}`,
+        cursor: collapsible ? "pointer" : "default",
+        userSelect: "none",
+      }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          {label}
+        </span>
+        <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 10, padding: "0px 7px", fontWeight: 600 }}>
+          {count}
+        </span>
+        {collapsible && (
+          <span style={{ fontSize: 10, color: C.textMuted, marginLeft: "auto" }}>
+            {defaultOpen ? "▲ Hide" : "▼ Show"}
+          </span>
+        )}
+      </div>
+      {subtitle && (
+        <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, fontStyle: "italic" }}>{subtitle}</div>
+      )}
+    </div>
+  );
+}
+
 function ScoutingView() {
   const [founders, setFounders] = useState([]);
   const [total, setTotal] = useState(0);
@@ -1188,9 +1300,8 @@ function ScoutingView() {
   const [search, setSearch] = useState("");
   const [debSearch, setDebSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [viewMode, setViewMode] = useState("grouped"); // "grouped" | "list"
   const [scoutModeKey, setScoutModeKey] = useState("all");
-  const [startupsOnly, setStartupsOnly] = useState(true);
+  const [showIndividuals, setShowIndividuals] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -1198,13 +1309,26 @@ function ScoutingView() {
 
   const scoutMode = SCOUT_MODES.find(m => m.key === scoutModeKey) || SCOUT_MODES[0];
 
-  // Apply entity filter + scout mode filter + scout mode sort to any set of founders
-  const applyScout = useCallback((list) => {
-    return [...list]
-      .filter(f => startupsOnly ? f.entityType === "startup" : true)
+  // Startups: entityType === 'startup', sorted by scout mode
+  const visibleStartups = useMemo(() => {
+    return [...founders]
+      .filter(f => f.entityType === "startup")
       .filter(scoutMode.filter)
       .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
-  }, [scoutMode, startupsOnly]);
+  }, [founders, scoutMode]);
+
+  // Individuals: no entityType / 'individual'
+  const visibleIndividuals = useMemo(() => {
+    return [...founders]
+      .filter(f => f.entityType !== "startup")
+      .filter(scoutMode.filter)
+      .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
+  }, [founders, scoutMode]);
+
+  // Legacy: needed for FieldLegend filtered count
+  const applyScout = useCallback((list) => {
+    return [...list].filter(scoutMode.filter).sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
+  }, [scoutMode]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebSearch(search), 300);
@@ -1229,14 +1353,13 @@ function ScoutingView() {
     return () => { cancelled = true; };
   }, [selected?.id]);
 
-  // Grouped mode fetches all at once; list mode paginates
-  const buildUrl = useCallback((offset = 0) => {
-    const limit = viewMode === "grouped" ? 2000 : PAGE_SIZE;
-    const p = new URLSearchParams({ limit, offset, sort: "score", order: "desc" });
+  // Always fetch everything upfront — client-side split into startups / individuals
+  const buildUrl = useCallback(() => {
+    const p = new URLSearchParams({ limit: 2000, offset: 0, sort: "score", order: "desc" });
     if (debSearch) p.set("search", debSearch);
     if (filterStatus !== "all") p.set("status", filterStatus);
     return `${API}/api/founders?${p}`;
-  }, [debSearch, filterStatus, viewMode]);
+  }, [debSearch, filterStatus]);
 
   const fetchFounders = useCallback(async (reset = false) => {
     if (reset) setLoading(true);
@@ -1269,25 +1392,7 @@ function ScoutingView() {
     } finally { setLoading(false); }
   }, [buildUrl]);
 
-  useEffect(() => { fetchFounders(true); }, [debSearch, filterStatus, viewMode]);
-
-  const loadMore = useCallback(async () => {
-    if (viewMode === "grouped" || loadingMore || founders.length >= total) return;
-    setLoadingMore(true);
-    try {
-      const res = await fetch(buildUrl(founders.length));
-      const data = await res.json();
-      setFounders(prev => [...prev, ...(data.founders || [])]);
-    } finally { setLoadingMore(false); }
-  }, [founders.length, total, loadingMore, buildUrl, viewMode]);
-
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el || viewMode === "grouped") return;
-    const fn = () => { if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) loadMore(); };
-    el.addEventListener("scroll", fn);
-    return () => el.removeEventListener("scroll", fn);
-  }, [loadMore, viewMode]);
+  useEffect(() => { fetchFounders(true); }, [debSearch, filterStatus]);
 
   const handleStatus = async (id, st) => {
     setFounders(prev => prev.map(f => f.id === id ? { ...f, status: st } : f));
@@ -1304,19 +1409,6 @@ function ScoutingView() {
   };
 
   // Group founders into archetype buckets
-  const grouped = useCallback(() => {
-    const buckets = Object.fromEntries(ARCHETYPES.map(a => [a.key, []]));
-    founders.forEach(f => {
-      const keys = classifyFounder(f);
-      keys.forEach(k => buckets[k].push(f));
-    });
-    // Apply scout mode filter + sort within each bucket
-    Object.keys(buckets).forEach(k => {
-      buckets[k] = applyScout(buckets[k]);
-    });
-    return buckets;
-  }, [founders, applyScout]);
-
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
       {/* List panel */}
@@ -1332,24 +1424,7 @@ function ScoutingView() {
             }} />
           {/* Scout mode selector */}
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-              <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Scout for</div>
-              {/* Startups / All signals toggle */}
-              <div style={{ display: "flex", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 2, gap: 2 }}>
-                {[["startup", "Startups"], ["all", "All signals"]].map(([val, lbl]) => {
-                  const active = startupsOnly ? val === "startup" : val === "all";
-                  return (
-                    <button key={val} onClick={() => setStartupsOnly(val === "startup")} style={{
-                      padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
-                      cursor: "pointer", border: "none", transition: "all 0.15s",
-                      background: active ? C.surface : "transparent",
-                      color: active ? C.text : C.textMuted,
-                      boxShadow: active ? C.shadow : "none",
-                    }}>{lbl}</button>
-                  );
-                })}
-              </div>
-            </div>
+            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Scout for</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
               {SCOUT_MODES.map(m => {
                 const active = scoutModeKey === m.key;
@@ -1371,75 +1446,60 @@ function ScoutingView() {
             )}
           </div>
 
-          {/* Mode toggle + status filters */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            {/* View mode toggle */}
-            <div style={{ display: "flex", background: C.bg, borderRadius: 7, border: `1px solid ${C.border}`, padding: 2, gap: 2 }}>
-              {[["grouped", "Archetypes"], ["list", "List"]].map(([mode, lbl]) => (
-                <button key={mode} onClick={() => setViewMode(mode)} style={{
-                  padding: "3px 10px", borderRadius: 5, fontSize: 11, fontWeight: 600,
-                  cursor: "pointer", border: "none", transition: "all 0.15s",
-                  background: viewMode === mode ? C.surface : "transparent",
-                  color: viewMode === mode ? C.text : C.textMuted,
-                  boxShadow: viewMode === mode ? C.shadow : "none",
-                }}>{lbl}</button>
-              ))}
-            </div>
-            {/* Status filters (list mode only) */}
-            {viewMode === "list" && (
-              <div style={{ display: "flex", gap: 4 }}>
-                {["all", ...Object.keys(STATUS)].map(s => {
-                  const cfg = STATUS[s];
-                  const active = filterStatus === s;
-                  return (
-                    <button key={s} onClick={() => setFilterStatus(s)} style={{
-                      padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 500,
-                      cursor: "pointer", border: `1px solid ${active ? (cfg?.border || C.accentBorder) : C.border}`,
-                      background: active ? (cfg?.bg || C.accentLight) : C.surface,
-                      color: active ? (cfg?.color || C.accent) : C.textSub,
-                    }}>{s === "all" ? "All" : cfg.label}</button>
-                  );
-                })}
-              </div>
-            )}
+          {/* Status filter row */}
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {["all", ...Object.keys(STATUS)].map(s => {
+              const cfg = STATUS[s];
+              const active = filterStatus === s;
+              return (
+                <button key={s} onClick={() => setFilterStatus(s)} style={{
+                  padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 500,
+                  cursor: "pointer", border: `1px solid ${active ? (cfg?.border || C.accentBorder) : C.border}`,
+                  background: active ? (cfg?.bg || C.accentLight) : C.surface,
+                  color: active ? (cfg?.color || C.accent) : C.textSub,
+                }}>{s === "all" ? "All" : cfg.label}</button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Count */}
+        {/* Count summary */}
         <FieldLegend
           total={total}
-          filtered={scoutModeKey !== "all" ? applyScout(founders).length : null}
+          filtered={scoutModeKey !== "all" ? visibleStartups.length : null}
           scoutLabel={scoutModeKey !== "all" ? scoutMode.label : null}
         />
 
-        {/* List / Grouped */}
+        {/* Two-section list */}
         <div ref={listRef} style={{ flex: 1, overflowY: "auto" }}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>Loading founders…</div>
-          ) : founders.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>No founders match filters</div>
-          ) : viewMode === "grouped" ? (
-            // ── Archetype buckets ──
-            (() => {
-              const buckets = grouped();
-              return ARCHETYPES.map((arch, i) => (
-                <ArchetypeSection
-                  key={arch.key}
-                  archetype={arch}
-                  founders={buckets[arch.key]}
-                  selected={selected}
-                  onSelect={setSelected}
-                  defaultOpen={true}
-                />
-              ));
-            })()
+            <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>Loading…</div>
           ) : (
-            // ── Flat list ──
             <>
-              {applyScout(founders).map(f => (
-                <FounderRow key={f.id} founder={f} selected={selected?.id === f.id} onClick={setSelected} />
+              {/* ── Startups section ── */}
+              <SectionHeader label="Startups" count={visibleStartups.length} />
+              {visibleStartups.length === 0 ? (
+                <div style={{ padding: "16px 18px", fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>
+                  No startups match current filters. Pipeline runs hourly — check back later or switch to All signals.
+                </div>
+              ) : (
+                visibleStartups.map(f => (
+                  <StartupCard key={f.id} founder={f} selected={selected?.id === f.id} onClick={setSelected} />
+                ))
+              )}
+
+              {/* ── Founders to follow section ── */}
+              <SectionHeader
+                label="Founders to follow"
+                count={visibleIndividuals.length}
+                collapsible
+                subtitle="Pre-company signals — people worth watching before they launch"
+                defaultOpen={showIndividuals}
+                onToggle={() => setShowIndividuals(v => !v)}
+              />
+              {showIndividuals && visibleIndividuals.map(f => (
+                <IndividualCard key={f.id} founder={f} selected={selected?.id === f.id} onClick={setSelected} />
               ))}
-              {loadingMore && <div style={{ padding: 12, textAlign: "center", color: C.textMuted, fontSize: 12 }}>Loading more…</div>}
             </>
           )}
         </div>
