@@ -1039,6 +1039,78 @@ function ArchetypeSection({ archetype, founders, selected, onSelect, defaultOpen
   );
 }
 
+function FieldLegend({ total }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderBottom: `1px solid ${C.borderLight}` }}>
+      {/* Count row + toggle */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          padding: "6px 20px", fontSize: 11, color: C.textMuted,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          cursor: "pointer", userSelect: "none",
+        }}>
+        <span>{total} companies tracked</span>
+        <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 600 }}>
+          {open ? "Hide legend ▲" : "Data sources ▼"}
+        </span>
+      </div>
+
+      {open && (
+        <div style={{ padding: "10px 20px 14px", background: C.bg, fontSize: 11, color: C.textSub, lineHeight: 1.7 }}>
+          {/* Data sources */}
+          <div style={{ fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: "uppercase", fontSize: 10, letterSpacing: "0.05em" }}>Data Sources</div>
+          {[
+            { label: "GitHub", dot: SOURCE.github.color, desc: "Commit activity, stars, repositories, bio" },
+            { label: "Hacker News", dot: SOURCE.hn.color, desc: "Karma, top posts, Show HN launches" },
+            { label: "Product Hunt", dot: SOURCE.producthunt.color, desc: "Launch upvotes, featured products" },
+            { label: "YC API", dot: "#FF6600", desc: "W26, S25, W25 batch companies — official YC directory" },
+            { label: "Accelerator seeds", dot: "#6d28d9", desc: "Curated lists: Techstars, 500 Global, PnP, HF0, a16z Speedrun, Pioneer" },
+            { label: "HN watcher", dot: "#888", desc: "Auto-detects new Launch HN posts mentioning any accelerator" },
+          ].map(({ label, dot, desc }) => (
+            <div key={label} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0, marginTop: 4 }} />
+              <span><span style={{ fontWeight: 600, color: C.textSub }}>{label}</span> — {desc}</span>
+            </div>
+          ))}
+
+          {/* Incubator badges */}
+          <div style={{ fontWeight: 700, color: C.textMuted, margin: "10px 0 6px", textTransform: "uppercase", fontSize: 10, letterSpacing: "0.05em" }}>Incubator Badges</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {Object.entries(INCUBATOR_COLORS).map(([name, style]) => (
+              <span key={name} style={{
+                fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
+                background: style.bg, color: style.color,
+              }}>{name}</span>
+            ))}
+          </div>
+
+          {/* Score */}
+          <div style={{ fontWeight: 700, color: C.textMuted, margin: "10px 0 6px", textTransform: "uppercase", fontSize: 10, letterSpacing: "0.05em" }}>Score (0–100)</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              { label: "Pedigree", max: "35 pts", desc: "YC / FAANG / serial founder / PhD" },
+              { label: "Velocity", max: "30 pts", desc: "GitHub commits in 90 days" },
+              { label: "Momentum", max: "25 pts", desc: "GitHub stars + HN karma" },
+              { label: "Availability", max: "10 pts", desc: "No funding announced in bio" },
+            ].map(({ label, max, desc }) => (
+              <div key={label} style={{ fontSize: 10, background: C.surface, borderRadius: 6, padding: "5px 8px", border: `1px solid ${C.borderLight}` }}>
+                <span style={{ fontWeight: 700, color: C.textSub }}>{label}</span>
+                <span style={{ color: C.textMuted }}> {max} — {desc}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 8, color: C.textMuted, fontStyle: "italic" }}>
+            Pipeline runs hourly. YC companies seeded from public API. Other accelerators updated from curated list + HN launches.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScoutingView() {
   const [founders, setFounders] = useState([]);
   const [total, setTotal] = useState(0);
@@ -1207,9 +1279,7 @@ function ScoutingView() {
         </div>
 
         {/* Count */}
-        <div style={{ padding: "6px 20px", fontSize: 11, color: C.textMuted, borderBottom: `1px solid ${C.borderLight}` }}>
-          {total} founders
-        </div>
+        <FieldLegend total={total} />
 
         {/* List / Grouped */}
         <div ref={listRef} style={{ flex: 1, overflowY: "auto" }}>
