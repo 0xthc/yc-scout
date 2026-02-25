@@ -640,14 +640,24 @@ function whySurfaced(founder) {
   return parts.join(" · ");
 }
 
+const INCUBATOR_COLORS = {
+  "YC":           { bg: "#FF6600", color: "#fff" },
+  "a16z Speedrun":{ bg: "#000",    color: "#fff" },
+  "HF0":          { bg: "#1a1a2e", color: "#e0e0ff" },
+  "Techstars":    { bg: "#0b6e4f", color: "#fff" },
+  "500 Global":   { bg: "#e63946", color: "#fff" },
+  "Plug and Play":{ bg: "#005f99", color: "#fff" },
+  "Pioneer":      { bg: "#6d28d9", color: "#fff" },
+};
+
 function IncubatorBadge({ label }) {
   if (!label) return null;
-  const isYC = label.startsWith("YC");
+  const key = Object.keys(INCUBATOR_COLORS).find(k => label.startsWith(k)) || null;
+  const style = key ? INCUBATOR_COLORS[key] : { bg: C.accentLight, color: C.accent };
   return (
     <span style={{
       fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
-      background: isYC ? "#FF6600" : C.accentLight,
-      color: isYC ? "#fff" : C.accent,
+      background: style.bg, color: style.color,
       flexShrink: 0, letterSpacing: "0.02em",
     }}>{label}</span>
   );
@@ -936,13 +946,13 @@ const PAGE_SIZE = 50;
 
 const ARCHETYPES = [
   {
-    key: "yc_batch",
-    label: "YC Batch",
-    desc: "Current & recent YC companies",
+    key: "incubators",
+    label: "Incubators",
+    desc: "YC · Techstars · 500 Global · a16z Speedrun · HF0 · Plug and Play · Pioneer",
     color: "#FF6600",
     bg: "#fff3eb",
     border: "#ffd0b0",
-    match: f => f.incubator && f.incubator.startsWith("YC"),
+    match: f => !!f.incubator,
   },
   {
     key: "act_now",

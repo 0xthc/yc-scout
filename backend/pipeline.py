@@ -26,7 +26,7 @@ from backend.db import get_db, init_db
 from backend.embedder import embed_all_founders
 from backend.enrichment import enrich_qualified_founders
 from backend.scoring import score_founder
-from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, enrich_founders, scrape_yc
+from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, enrich_founders, scrape_yc, scrape_accelerators
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,6 +69,14 @@ def run_pipeline():
             logger.info("YC scraper: %d new companies added", yc_added)
         except Exception as e:
             logger.error("YC scraper failed: %s", e)
+
+        # Other accelerators — curated seeds + HN watcher
+        try:
+            acc_added = scrape_accelerators(conn)
+            founders_scraped += acc_added
+            logger.info("Accelerators scraper: %d new companies added", acc_added)
+        except Exception as e:
+            logger.error("Accelerators scraper failed: %s", e)
 
     # Phase 1.5: Embed founder content
     with get_db() as conn:
