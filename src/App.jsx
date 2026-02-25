@@ -1190,6 +1190,7 @@ function ScoutingView() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [viewMode, setViewMode] = useState("grouped"); // "grouped" | "list"
   const [scoutModeKey, setScoutModeKey] = useState("all");
+  const [startupsOnly, setStartupsOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -1197,10 +1198,13 @@ function ScoutingView() {
 
   const scoutMode = SCOUT_MODES.find(m => m.key === scoutModeKey) || SCOUT_MODES[0];
 
-  // Apply scout mode filter + sort to any set of founders
+  // Apply entity filter + scout mode filter + scout mode sort to any set of founders
   const applyScout = useCallback((list) => {
-    return [...list].filter(scoutMode.filter).sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
-  }, [scoutMode]);
+    return [...list]
+      .filter(f => startupsOnly ? f.entityType === "startup" : true)
+      .filter(scoutMode.filter)
+      .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
+  }, [scoutMode, startupsOnly]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebSearch(search), 300);
@@ -1328,7 +1332,24 @@ function ScoutingView() {
             }} />
           {/* Scout mode selector */}
           <div>
-            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Scout for</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+              <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Scout for</div>
+              {/* Startups / All signals toggle */}
+              <div style={{ display: "flex", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 2, gap: 2 }}>
+                {[["startup", "Startups"], ["all", "All signals"]].map(([val, lbl]) => {
+                  const active = startupsOnly ? val === "startup" : val === "all";
+                  return (
+                    <button key={val} onClick={() => setStartupsOnly(val === "startup")} style={{
+                      padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
+                      cursor: "pointer", border: "none", transition: "all 0.15s",
+                      background: active ? C.surface : "transparent",
+                      color: active ? C.text : C.textMuted,
+                      boxShadow: active ? C.shadow : "none",
+                    }}>{lbl}</button>
+                  );
+                })}
+              </div>
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
               {SCOUT_MODES.map(m => {
                 const active = scoutModeKey === m.key;

@@ -168,8 +168,8 @@ def _upsert_founder(conn, f: dict) -> int:
         conn.execute(
             """INSERT INTO founders
                (name, handle, avatar, bio, domain, company, location, stage,
-                incubator, founded, notes, status, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,'to_contact', CURRENT_TIMESTAMP)""",
+                incubator, founded, notes, status, entity_type, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,'to_contact','startup', CURRENT_TIMESTAMP)""",
             (
                 f["name"], f["handle"], f["avatar"], f["bio"],
                 f["domain"], f["company"], f["location"],

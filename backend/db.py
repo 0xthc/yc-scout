@@ -381,6 +381,17 @@ def _migrate_scores_columns(conn):
     except Exception:
         pass
 
+    # entity_type column — 'startup' | 'individual'
+    try:
+        conn.execute("ALTER TABLE founders ADD COLUMN entity_type TEXT DEFAULT 'individual'")
+    except Exception:
+        pass
+    # Back-fill: anyone with an incubator set is a startup
+    try:
+        conn.execute("UPDATE founders SET entity_type = 'startup' WHERE incubator != '' AND incubator IS NOT NULL AND entity_type = 'individual'")
+    except Exception:
+        pass
+
     # Enrichment columns
     for col, definition in [
         ("enriched_at", "TIMESTAMP"),
