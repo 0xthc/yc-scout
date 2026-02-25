@@ -1309,18 +1309,18 @@ function ScoutingView() {
 
   const scoutMode = SCOUT_MODES.find(m => m.key === scoutModeKey) || SCOUT_MODES[0];
 
-  // Startups: entityType === 'startup', sorted by scout mode
+  // Startups: entityType=startup OR incubator set (fallback while API redeploys)
   const visibleStartups = useMemo(() => {
     return [...founders]
-      .filter(f => f.entityType === "startup")
+      .filter(f => f.entityType === "startup" || (!f.entityType && !!f.incubator))
       .filter(scoutMode.filter)
       .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
   }, [founders, scoutMode]);
 
-  // Individuals: no entityType / 'individual'
+  // Individuals: no incubator, entityType !== startup
   const visibleIndividuals = useMemo(() => {
     return [...founders]
-      .filter(f => f.entityType !== "startup")
+      .filter(f => f.entityType !== "startup" && !f.incubator)
       .filter(scoutMode.filter)
       .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
   }, [founders, scoutMode]);
