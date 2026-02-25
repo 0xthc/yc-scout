@@ -623,45 +623,66 @@ function PulseView() {
 
 // ── SCOUTING VIEW ─────────────────────────────────────────────
 
+// ── Plain-English signal summary ──────────────────────────────
+function whySurfaced(founder) {
+  const parts = [];
+  if (founder.incubator) parts.push(founder.incubator);
+  const commits = founder.github_commits_90d || 0;
+  const stars = founder.github_stars || 0;
+  const hn = founder.hn_karma || 0;
+  if (commits > 500) parts.push(`shipping fast — ${commits.toLocaleString()} commits/90d`);
+  else if (commits > 100) parts.push(`active builder — ${commits.toLocaleString()} commits/90d`);
+  if (stars > 1000) parts.push(`${(stars/1000).toFixed(1)}k GitHub stars`);
+  else if (stars > 200) parts.push(`${stars} GitHub stars`);
+  if (hn > 2000) parts.push(`strong HN presence`);
+  if (founder.sources?.includes("producthunt")) parts.push("PH launch");
+  if (parts.length === 0) parts.push("early signal");
+  return parts.join(" · ");
+}
+
+function IncubatorBadge({ label }) {
+  if (!label) return null;
+  const isYC = label.startsWith("YC");
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
+      background: isYC ? "#FF6600" : C.accentLight,
+      color: isYC ? "#fff" : C.accent,
+      flexShrink: 0, letterSpacing: "0.02em",
+    }}>{label}</span>
+  );
+}
+
 function FounderRow({ founder, selected, onClick }) {
-  const sc = SOURCE[founder.sources?.[0]] || SOURCE.github;
+  const bio = founder.bio || "";
   return (
     <div onClick={() => onClick(founder)} style={{
-      display: "flex", alignItems: "center", gap: 14, padding: "12px 20px",
-      borderBottom: `1px solid ${C.borderLight}`, cursor: "pointer",
-      background: selected ? C.accentLight : "transparent", transition: "background 0.1s",
+      padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`,
+      cursor: "pointer", background: selected ? C.accentLight : "transparent",
+      transition: "background 0.1s",
     }}
       onMouseEnter={e => { if (!selected) e.currentTarget.style.background = C.bg; }}
       onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}>
 
-      <div style={{
-        width: 36, height: 36, borderRadius: "50%", background: `${scoreColor(founder.score)}18`,
-        border: `1.5px solid ${scoreColor(founder.score)}40`, display: "flex",
-        alignItems: "center", justifyContent: "center", fontSize: 13,
-        fontWeight: 700, color: scoreColor(founder.score), flexShrink: 0,
-      }}>
-        {(founder.name || "?")[0].toUpperCase()}
-      </div>
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {founder.company || founder.name}
-          </span>
-          {founder.stage && (
-            <span style={{ fontSize: 10, color: C.accent, background: C.accentLight, padding: "1px 6px", borderRadius: 4, flexShrink: 0 }}>
-              {founder.stage}
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: 11, color: C.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {founder.name} · {founder.domain} · {founder.location}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-        <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4, color: sc.color, background: sc.bg }}>{sc.label}</span>
+      {/* Row 1: name + badges + score */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {founder.company || founder.name}
+        </span>
+        <IncubatorBadge label={founder.incubator} />
         <ScorePill score={founder.score} size="sm" />
+      </div>
+
+      {/* Row 2: one-liner description */}
+      {bio && (
+        <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.4, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {bio}
+        </div>
+      )}
+
+      {/* Row 3: why surfaced */}
+      <div style={{ fontSize: 11, color: C.textMuted }}>
+        {whySurfaced(founder)}
       </div>
     </div>
   );
@@ -711,6 +732,7 @@ function FounderDetail({ founder, onStatusChange, onNotesChange }) {
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>{founder.company || founder.name}</h2>
+            {founder.incubator && <IncubatorBadge label={founder.incubator} />}
             {founder.stage && <Badge>{founder.stage}</Badge>}
             <button onClick={() => onStatusChange(founder.id, nextStatus)} style={{
               padding: "3px 10px", borderRadius: 99, fontSize: 11, fontWeight: 600,
@@ -718,34 +740,81 @@ function FounderDetail({ founder, onStatusChange, onNotesChange }) {
               background: stCfg.bg, color: stCfg.color,
             }}>{stCfg.label}</button>
           </div>
-          <div style={{ fontSize: 12, color: C.textMuted }}>{founder.name} · {founder.domain} · {founder.location}</div>
-          <p style={{ margin: "8px 0 0", fontSize: 13, color: C.textSub, lineHeight: 1.5 }}>{founder.bio}</p>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>
+            {[founder.name, founder.domain, founder.location].filter(Boolean).join(" · ")}
+          </div>
+          {founder.bio && (
+            <p style={{ margin: "0 0 8px", fontSize: 14, color: C.text, fontWeight: 500, lineHeight: 1.5 }}>{founder.bio}</p>
+          )}
+          {/* Why surfaced */}
+          <div style={{ fontSize: 12, color: C.textMuted, padding: "6px 10px", background: C.bg, borderRadius: 6, border: `1px solid ${C.borderLight}` }}>
+            <span style={{ fontWeight: 600, color: C.textSub }}>Why surfaced: </span>{whySurfaced(founder)}
+          </div>
         </div>
         <ScorePill score={founder.score} />
       </div>
 
-      {/* Stats grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
+      {/* Stats grid — plain English */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10, marginBottom: 20 }}>
         {[
-          { label: "GH Stars", val: (founder.github_stars || 0).toLocaleString(), color: SOURCE.github.color },
-          { label: "Commits/90d", val: (founder.github_commits_90d || 0).toLocaleString(), color: SOURCE.github.color },
-          { label: "HN Karma", val: (founder.hn_karma || 0).toLocaleString(), color: SOURCE.hn.color },
-          { label: "HN Top", val: `${founder.hn_top_score || 0} pts`, color: SOURCE.hn.color },
-          { label: "PH Upvotes", val: (founder.ph_upvotes || 0).toLocaleString(), color: SOURCE.producthunt.color },
-          { label: "Followers", val: founder.followers >= 1000 ? `${(founder.followers / 1000).toFixed(1)}k` : String(founder.followers || 0), color: C.accent },
-        ].map(({ label, val, color }) => (
-          <Card key={label} style={{ padding: "10px 14px" }}>
-            <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 3 }}>{label}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "ui-monospace, monospace" }}>{val}</div>
+          {
+            label: "Building speed",
+            val: (founder.github_commits_90d || 0) > 0
+              ? `${(founder.github_commits_90d || 0).toLocaleString()} commits / 90d`
+              : "No GitHub activity",
+            sub: (founder.github_commits_90d || 0) > 500 ? "Shipping very fast" : (founder.github_commits_90d || 0) > 100 ? "Actively building" : "Early stage",
+            color: SOURCE.github.color,
+          },
+          {
+            label: "Public traction",
+            val: (founder.github_stars || 0) > 0
+              ? `${(founder.github_stars || 0).toLocaleString()} GitHub stars`
+              : "No public repos yet",
+            sub: (founder.github_stars || 0) > 1000 ? "Strong visibility" : (founder.github_stars || 0) > 100 ? "Growing audience" : "Pre-visibility",
+            color: SOURCE.github.color,
+          },
+          {
+            label: "Community presence",
+            val: (founder.hn_karma || 0) > 0
+              ? `${(founder.hn_karma || 0).toLocaleString()} HN karma`
+              : "Not on Hacker News",
+            sub: (founder.hn_karma || 0) > 2000 ? "Thought leader" : (founder.hn_karma || 0) > 500 ? "Active voice" : "Low HN presence",
+            color: SOURCE.hn.color,
+          },
+          {
+            label: "Audience",
+            val: (founder.followers || 0) >= 1000
+              ? `${((founder.followers || 0) / 1000).toFixed(1)}k followers`
+              : `${founder.followers || 0} followers`,
+            sub: (founder.ph_upvotes || 0) > 0 ? `${founder.ph_upvotes} PH upvotes` : "No PH launch yet",
+            color: C.accent,
+          },
+        ].map(({ label, val, sub, color }) => (
+          <Card key={label} style={{ padding: "12px 14px" }}>
+            <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 4, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 2 }}>{val}</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>{sub}</div>
           </Card>
         ))}
       </div>
 
-      {/* Score breakdown */}
+      {/* Score breakdown — plain English */}
       <Card style={{ padding: 16, marginBottom: 16 }}>
-        <SectionTitle>Score Breakdown</SectionTitle>
-        {Object.entries(DIMS).map(([dim, [label, max]]) => (
-          <ScoreBar key={dim} label={label} value={founder.scoreBreakdown?.[dim] || 0} max={max} />
+        <SectionTitle>What drives this score</SectionTitle>
+        {[
+          { dim: "founder_quality", label: "Pedigree", max: 35, desc: "Background — YC alumni, top company, serial founder, PhD" },
+          { dim: "execution_velocity", label: "Velocity", max: 30, desc: "Building speed — GitHub commits in the last 90 days" },
+          { dim: "market_conviction", label: "Momentum", max: 25, desc: "Public traction — GitHub stars + Hacker News karma" },
+          { dim: "deal_availability", label: "Availability", max: 10, desc: "Likely open to a conversation — no raised/Series A signals in bio" },
+        ].map(({ dim, label, max, desc }) => (
+          <div key={dim} style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: C.textSub }}>{label}</span>
+              <span style={{ fontSize: 11, color: C.textMuted, fontFamily: "ui-monospace, monospace" }}>{founder.scoreBreakdown?.[dim] || 0}/{max}</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 5 }}>{desc}</div>
+            <ScoreBar label="" value={founder.scoreBreakdown?.[dim] || 0} max={max} />
+          </div>
         ))}
       </Card>
 
@@ -867,13 +936,22 @@ const PAGE_SIZE = 50;
 
 const ARCHETYPES = [
   {
+    key: "yc_batch",
+    label: "YC Batch",
+    desc: "Current & recent YC companies",
+    color: "#FF6600",
+    bg: "#fff3eb",
+    border: "#ffd0b0",
+    match: f => f.incubator && f.incubator.startsWith("YC"),
+  },
+  {
     key: "act_now",
-    label: "Act Now",
-    desc: "Score ≥ 65 · not yet contacted",
+    label: "Rising Stars",
+    desc: "Score ≥ 65 · high signal · not yet contacted",
     color: C.green,
     bg: C.greenLight,
     border: "#a7f3d0",
-    match: f => f.score >= 65 && !["pass", "contacted"].includes(f.status),
+    match: f => f.score >= 65 && !["pass", "contacted"].includes(f.status) && !f.incubator,
   },
   {
     key: "serial",
@@ -882,7 +960,7 @@ const ARCHETYPES = [
     color: C.accent,
     bg: C.accentLight,
     border: C.accentBorder,
-    match: f => f.is_serial_founder,
+    match: f => f.is_serial_founder && !f.incubator,
   },
   {
     key: "stealth",
