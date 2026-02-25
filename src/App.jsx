@@ -869,11 +869,11 @@ const ARCHETYPES = [
   {
     key: "act_now",
     label: "Act Now",
-    desc: "Score ≥ 85 · not yet contacted",
+    desc: "Score ≥ 65 · not yet contacted",
     color: C.green,
     bg: C.greenLight,
     border: "#a7f3d0",
-    match: f => f.score >= 85 && !["pass", "contacted"].includes(f.status),
+    match: f => f.score >= 65 && !["pass", "contacted"].includes(f.status),
   },
   {
     key: "serial",
@@ -905,7 +905,7 @@ const ARCHETYPES = [
   {
     key: "tracking",
     label: "Tracking",
-    desc: "Everything else",
+    desc: "Everything else worth watching",
     color: C.textSub,
     bg: C.bg,
     border: C.border,
@@ -971,7 +971,7 @@ function ScoutingView() {
   // Grouped mode fetches all at once; list mode paginates
   const buildUrl = useCallback((offset = 0) => {
     const limit = viewMode === "grouped" ? 2000 : PAGE_SIZE;
-    const p = new URLSearchParams({ limit, offset });
+    const p = new URLSearchParams({ limit, offset, sort: "score", order: "desc" });
     if (debSearch) p.set("search", debSearch);
     if (filterStatus !== "all") p.set("status", filterStatus);
     return `${API}/api/founders?${p}`;
@@ -1100,7 +1100,7 @@ function ScoutingView() {
                   founders={buckets[arch.key]}
                   selected={selected}
                   onSelect={setSelected}
-                  defaultOpen={i < 3}
+                  defaultOpen={true}
                 />
               ));
             })()

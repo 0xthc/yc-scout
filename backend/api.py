@@ -311,7 +311,7 @@ def _build_founders_batch(conn, rows):
 
 @app.get("/api/founders", response_model=PaginatedFounders)
 def list_founders(
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=2000),
     offset: int = Query(0, ge=0),
     search: str = Query("", description="Search name, company, domain"),
     source: str = Query("", description="Filter by source: github, hn, producthunt"),
