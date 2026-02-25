@@ -1578,6 +1578,49 @@ function FlowFundingItem({ item }) {
   );
 }
 
+function EuWatchPanel({ euLog, euInput, setEuInput, onAdd, onRemove }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 24, border: `1px solid ${C.borderLight}`, borderRadius: 10, overflow: "hidden" }}>
+      <div onClick={() => setOpen(o => !o)} style={{
+        padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center",
+        cursor: "pointer", userSelect: "none", background: C.surface,
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          EU Pattern Watch {euLog.length > 0 && <span style={{ fontWeight: 400, color: C.textMuted }}>({euLog.length})</span>}
+        </span>
+        <span style={{ fontSize: 10, color: C.textMuted }}>{open ? "▲" : "▼"}</span>
+      </div>
+      {open && (
+        <div style={{ padding: "14px 16px", background: C.bg }}>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>
+            Log EU trends that typically precede US by 12–36 months.
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <input value={euInput} onChange={e => setEuInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && onAdd()}
+              placeholder="e.g. Secondhand fashion gaining traction in Germany — est. 18 months to US"
+              style={{ flex: 1, padding: "8px 12px", border: `1px solid ${C.border}`, borderRadius: 7, background: C.surface, fontSize: 12, color: C.text, outline: "none" }} />
+            <button onClick={onAdd} style={{ padding: "8px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, background: C.accent, color: "#fff", border: "none", cursor: "pointer" }}>Log</button>
+          </div>
+          {euLog.length === 0
+            ? <div style={{ fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>Nothing logged yet.</div>
+            : euLog.map(entry => (
+              <div key={entry.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: `1px solid ${C.borderLight}` }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, color: C.text }}>{entry.text}</div>
+                  <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{entry.date}</div>
+                </div>
+                <button onClick={() => onRemove(entry.id)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", fontSize: 14, padding: 0 }}>×</button>
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MarketView() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1669,41 +1712,8 @@ function MarketView() {
           </div>
         </div>
 
-        {/* EU Pattern Watch */}
-        <div style={{ marginTop: 32 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>EU Pattern Watch</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>Log EU trends you're tracking — patterns that typically precede US by 12–36 months.</div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <input
-              value={euInput}
-              onChange={e => setEuInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && addEuSignal()}
-              placeholder="e.g. Secondhand fashion gaining traction in Germany — Vestiaire comps · est. 18 months to US peak"
-              style={{
-                flex: 1, padding: "9px 12px", border: `1px solid ${C.border}`, borderRadius: 8,
-                background: C.surface, fontSize: 12, color: C.text, outline: "none",
-              }} />
-            <button onClick={addEuSignal} style={{
-              padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-              background: C.accent, color: "#fff", border: "none", cursor: "pointer",
-            }}>Log</button>
-          </div>
-          {euLog.length === 0 ? (
-            <div style={{ fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>No EU signals logged yet.</div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {euLog.map(entry => (
-                <div key={entry.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{entry.text}</div>
-                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>Logged {entry.date}</div>
-                  </div>
-                  <button onClick={() => removeEuSignal(entry.id)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1 }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* EU Pattern Watch — compact, collapsible */}
+        <EuWatchPanel euLog={euLog} euInput={euInput} setEuInput={setEuInput} onAdd={addEuSignal} onRemove={removeEuSignal} />
 
       </div>
     </div>
