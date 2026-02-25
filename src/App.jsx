@@ -1515,17 +1515,23 @@ function ScoutingView() {
 
 // ── Market View (Pulse) ───────────────────────────────────────
 
-function FlowSectorCard({ sector }) {
+function FlowSectorCard({ sector, selected, onClick }) {
   const maxMomentum = 120;
   const pct = Math.min(100, (sector.momentum / maxMomentum) * 100);
   const heat = sector.events > 5 ? "high" : sector.events > 1 ? "mid" : "low";
   const heatColor = heat === "high" ? C.green : heat === "mid" ? C.accent : C.textMuted;
   const heatLabel = heat === "high" ? "Active" : heat === "mid" ? "Building" : "Quiet";
   return (
-    <div style={{
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
-      padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6,
-    }}>
+    <div onClick={() => onClick(sector)}
+      style={{
+        background: selected ? C.accentLight : C.surface,
+        border: `1px solid ${selected ? C.accentBorder : C.border}`,
+        borderRadius: 10, padding: "14px 16px",
+        display: "flex", flexDirection: "column", gap: 6,
+        cursor: "pointer", transition: "all 0.15s",
+      }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.borderColor = C.accentBorder; }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.borderColor = C.border; }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{sector.sector}</span>
         <span style={{ fontSize: 10, fontWeight: 700, color: heatColor, background: heat === "high" ? C.greenLight : heat === "mid" ? C.accentLight : C.bg, border: `1px solid ${heat === "high" ? "#a7f3d0" : heat === "mid" ? C.accentBorder : C.borderLight}`, borderRadius: 10, padding: "2px 8px", whiteSpace: "nowrap" }}>{heatLabel}</span>
@@ -1621,19 +1627,76 @@ function EuWatchPanel({ euLog, euInput, setEuInput, onAdd, onRemove }) {
   );
 }
 
+function SectorDetail({ sector, themes, onClose }) {
+  const clusters = (themes || []).filter(t => (t.sector || "Other") === sector.sector);
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{sector.sector}</div>
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+            {clusters.length} clusters · {sector.founders} companies
+            {sector.events > 0 && ` · ${sector.events} breaks this week`}
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px", fontSize: 11, color: C.textMuted, cursor: "pointer" }}>
+          Back to funding
+        </button>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {clusters.length === 0 && (
+          <div style={{ fontSize: 12, color: C.textMuted, fontStyle: "italic", padding: 12 }}>No clusters found for this sector.</div>
+        )}
+        {clusters.map(c => (
+          <div key={c.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "13px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text, flex: 1 }}>{c.name}</span>
+              <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 10, padding: "1px 8px" }}>
+                {c.builderCount} companies
+              </span>
+            </div>
+            {c.description && (
+              <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.5, marginBottom: 8 }}>{c.description}</div>
+            )}
+            {c.founders?.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {c.founders.slice(0, 5).map(f => (
+                  <span key={f.id} style={{ fontSize: 11, color: C.textSub, background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 6, padding: "2px 8px" }}>
+                    {f.company || f.name}
+                  </span>
+                ))}
+                {c.founders.length > 5 && (
+                  <span style={{ fontSize: 11, color: C.textMuted }}>+{c.founders.length - 5} more</span>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MarketView() {
   const [data, setData] = useState(null);
+  const [themes, setThemes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSector, setSelectedSector] = useState(null);
   const [euLog, setEuLog] = useState(() => {
     try { return JSON.parse(localStorage.getItem("eu_signals") || "[]"); } catch { return []; }
   });
   const [euInput, setEuInput] = useState("");
 
   useEffect(() => {
-    fetch(`${API}/api/flow`)
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch(`${API}/api/flow`).then(r => r.json()),
+      fetch(`${API}/api/themes`).then(r => r.json()),
+    ]).then(([flowData, themesData]) => {
+      setData(flowData);
+      setThemes(Array.isArray(themesData) ? themesData : []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const addEuSignal = () => {
@@ -1669,18 +1732,34 @@ function MarketView() {
 
           {/* LEFT — Sector heat */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Sector Heat</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+              Sector Heat <span style={{ fontSize: 10, fontWeight: 400, fontStyle: "italic" }}>— click to explore clusters</span>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {(data?.sectors || []).map(s => <FlowSectorCard key={s.sector} sector={s} />)}
+              {(data?.sectors || []).map(s => (
+                <FlowSectorCard
+                  key={s.sector}
+                  sector={s}
+                  selected={selectedSector?.sector === s.sector}
+                  onClick={s => setSelectedSector(prev => prev?.sector === s.sector ? null : s)}
+                />
+              ))}
               {(!data?.sectors || data.sectors.length === 0) && (
                 <div style={{ fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>No sector data yet — run the pipeline to generate clusters.</div>
               )}
             </div>
           </div>
 
-          {/* RIGHT — Funding pulse + inflections */}
+          {/* RIGHT — Sector detail OR Funding pulse + inflections */}
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-
+          {selectedSector ? (
+            <SectorDetail
+              sector={selectedSector}
+              themes={themes}
+              onClose={() => setSelectedSector(null)}
+            />
+          ) : (
+            <>
             {/* Funding news */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Recent Funding</div>
@@ -1709,6 +1788,8 @@ function MarketView() {
                 </div>
               </div>
             )}
+            </>
+          )}
           </div>
         </div>
 
