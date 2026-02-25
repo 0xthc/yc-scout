@@ -635,25 +635,28 @@ def get_flow():
 
     # ── 1. Sector momentum ───────────────────────────────────────────────────
     with get_db() as conn:
-        themes = conn.execute(
-            """SELECT t.id, t.name, t.sector, t.builder_count,
-                      COUNT(e.id) as recent_events
-               FROM themes t
-               LEFT JOIN emergence_events e
-                 ON e.entity_id = t.id
-                 AND e.entity_type = 'theme'
-                 AND e.detected_at > datetime('now', '-7 days')
-               GROUP BY t.id
-               ORDER BY t.builder_count DESC""",
+        # Themes — two simple queries, merged in Python
+        themes_rows = conn.execute(
+            "SELECT id, name, sector, builder_count FROM themes ORDER BY builder_count DESC"
         ).fetchall()
+
+        # Recent theme-level emergence events (last 7 days)
+        theme_events = conn.execute(
+            """SELECT entity_id, COUNT(*) as cnt
+               FROM emergence_events
+               WHERE entity_type = 'theme'
+                 AND detected_at > datetime('now', '-7 days')
+               GROUP BY entity_id"""
+        ).fetchall()
+        theme_event_map = {r["entity_id"]: r["cnt"] for r in theme_events}
 
         # Aggregate by sector
         sector_map = defaultdict(lambda: {"themes": 0, "founders": 0, "events": 0, "topThemes": []})
-        for t in themes:
-            s = t["sector"] or "Other"
+        for t in themes_rows:
+            s = (t["sector"] or "Other") if "sector" in t.keys() else "Other"
             sector_map[s]["themes"] += 1
             sector_map[s]["founders"] += t["builder_count"] or 0
-            sector_map[s]["events"] += t["recent_events"] or 0
+            sector_map[s]["events"] += theme_event_map.get(t["id"], 0)
             if len(sector_map[s]["topThemes"]) < 3:
                 sector_map[s]["topThemes"].append(t["name"])
 
@@ -670,30 +673,36 @@ def get_flow():
         ]
         sectors.sort(key=lambda s: -s["momentum"])
 
-        # Recent founder inflections (last 7 days)
-        inflections = conn.execute(
-            """SELECT e.event_type, e.signal, e.detected_at,
-                      f.name as founder_name, f.company, f.incubator, f.score
-               FROM emergence_events e
-               JOIN founders f ON f.id = e.entity_id
-               WHERE e.entity_type = 'founder'
-                 AND e.detected_at > datetime('now', '-7 days')
-               ORDER BY e.detected_at DESC
-               LIMIT 20""",
+        # Recent founder inflections — simple query, no JOIN
+        inflection_events = conn.execute(
+            """SELECT event_type, signal, detected_at, entity_id
+               FROM emergence_events
+               WHERE entity_type = 'founder'
+                 AND detected_at > datetime('now', '-7 days')
+               ORDER BY detected_at DESC
+               LIMIT 20"""
         ).fetchall()
 
-        inflection_list = [
-            {
+        founder_ids = list({r["entity_id"] for r in inflection_events})
+        founder_map = {}
+        if founder_ids:
+            ph = ",".join("?" * len(founder_ids))
+            for f in conn.execute(
+                f"SELECT id, name, company, incubator FROM founders WHERE id IN ({ph})", founder_ids
+            ).fetchall():
+                founder_map[f["id"]] = f
+
+        inflection_list = []
+        for i in inflection_events:
+            f = founder_map.get(i["entity_id"])
+            inflection_list.append({
                 "eventType": i["event_type"],
                 "signal": i["signal"],
                 "detectedAt": i["detected_at"],
-                "founderName": i["founder_name"],
-                "company": i["company"] or "",
-                "incubator": i["incubator"] or "",
-                "score": i["score"] or 0,
-            }
-            for i in inflections
-        ]
+                "founderName": f["name"] if f else "",
+                "company": (f["company"] or "") if f else "",
+                "incubator": (f["incubator"] or "") if f else "",
+            })
 
     # ── 2. Funding news from RSS ─────────────────────────────────────────────
     RSS_FEEDS = [
