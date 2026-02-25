@@ -42,12 +42,12 @@ const STATUS = {
 const scoreColor = (s) => s >= 85 ? C.green : s >= 70 ? C.amber : s >= 50 ? C.blue : C.textMuted;
 const scoreLabel = (s) => s >= 85 ? "Strong" : s >= 70 ? "Good" : s >= 50 ? "Monitor" : "Weak";
 
+// dim key → [label, max points]
 const DIMS = {
-  founder_quality: "Founder Quality",
-  execution_velocity: "Execution",
-  market_conviction: "Conviction",
-  early_traction: "Traction",
-  deal_availability: "Availability",
+  founder_quality:    ["Pedigree",     35],
+  execution_velocity: ["Velocity",     30],
+  market_conviction:  ["Momentum",     25],
+  deal_availability:  ["Availability", 10],
 };
 
 // ── Shared primitives ─────────────────────────────────────────
@@ -79,16 +79,19 @@ function ScorePill({ score, size = "md" }) {
   );
 }
 
-function ScoreBar({ label, value }) {
-  const color = scoreColor(value);
+function ScoreBar({ label, value, max = 100 }) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  const color = scoreColor(Math.round(pct));
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <span style={{ fontSize: 12, color: C.textSub }}>{label}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color, fontFamily: "ui-monospace, monospace" }}>{value}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color, fontFamily: "ui-monospace, monospace" }}>
+          {value}<span style={{ color: C.textMuted, fontWeight: 400 }}>/{max}</span>
+        </span>
       </div>
-      <div style={{ height: 4, background: C.borderLight, borderRadius: 4, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 4, transition: "width 0.5s ease" }} />
+      <div style={{ height: 5, background: C.borderLight, borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 4, transition: "width 0.5s ease" }} />
       </div>
     </div>
   );
@@ -741,8 +744,8 @@ function FounderDetail({ founder, onStatusChange, onNotesChange }) {
       {/* Score breakdown */}
       <Card style={{ padding: 16, marginBottom: 16 }}>
         <SectionTitle>Score Breakdown</SectionTitle>
-        {Object.entries(DIMS).map(([dim, label]) => (
-          <ScoreBar key={dim} label={label} value={founder.scoreBreakdown?.[dim] || 0} />
+        {Object.entries(DIMS).map(([dim, [label, max]]) => (
+          <ScoreBar key={dim} label={label} value={founder.scoreBreakdown?.[dim] || 0} max={max} />
         ))}
       </Card>
 

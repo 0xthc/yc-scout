@@ -167,11 +167,10 @@ def score_founder(conn, founder_id, founder_info, signals_list):
 
     composite = min(pedigree + execution + momentum + availability, 100)
 
-    # Keep DB compatibility: map 4-model dimensions onto existing 5 columns.
     founder_quality = pedigree
     execution_velocity = execution
-    market_conviction = 0
-    early_traction = momentum
+    market_conviction = momentum   # momentum stored here (stars + HN karma)
+    early_traction = 0             # unused column — kept for DB compat
     deal_availability = availability
 
     save_score(
