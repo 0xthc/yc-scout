@@ -127,9 +127,9 @@ function EmptyState({ title, sub }) {
 
 // ── Nav ───────────────────────────────────────────────────────
 
-const VIEWS = ["raw", "field", "patterns", "breaks"];
-const VIEW_LABELS = { raw: "Raw", field: "Field", patterns: "Patterns", breaks: "Breaks" };
-const VIEW_ICONS = { raw: "", field: "", patterns: "", breaks: "" };
+const VIEWS = ["raw", "field", "patterns", "breaks", "flow"];
+const VIEW_LABELS = { raw: "Raw", field: "Field", patterns: "Patterns", breaks: "Breaks", flow: "Flow" };
+const VIEW_ICONS = { raw: "", field: "", patterns: "", breaks: "", flow: "" };
 
 function TopNav({ view, setView, stats }) {
   return (
@@ -1515,12 +1515,196 @@ function ScoutingView() {
 
 // ── Market View (Pulse) ───────────────────────────────────────
 
-function MarketView() {
+function FlowSectorCard({ sector }) {
+  const maxMomentum = 120;
+  const pct = Math.min(100, (sector.momentum / maxMomentum) * 100);
+  const heat = sector.events > 5 ? "high" : sector.events > 1 ? "mid" : "low";
+  const heatColor = heat === "high" ? C.green : heat === "mid" ? C.accent : C.textMuted;
+  const heatLabel = heat === "high" ? "Active" : heat === "mid" ? "Building" : "Quiet";
   return (
-    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, padding: 40, textAlign: "center" }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: "0.02em" }}>Pulse</div>
-      <div style={{ fontSize: 13, color: C.textMuted, maxWidth: 480, lineHeight: 1.6 }}>
-        Coming soon — fund portfolio signals, investment flow, sector heat maps. Track where capital is moving before it's public.
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+      padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{sector.sector}</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: heatColor, background: heat === "high" ? C.greenLight : heat === "mid" ? C.accentLight : C.bg, border: `1px solid ${heat === "high" ? "#a7f3d0" : heat === "mid" ? C.accentBorder : C.borderLight}`, borderRadius: 10, padding: "2px 8px", whiteSpace: "nowrap" }}>{heatLabel}</span>
+      </div>
+      {/* Momentum bar */}
+      <div style={{ height: 3, background: C.borderLight, borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: heatColor, borderRadius: 2, transition: "width 0.6s ease" }} />
+      </div>
+      <div style={{ display: "flex", gap: 12, fontSize: 11, color: C.textMuted }}>
+        <span><strong style={{ color: C.textSub }}>{sector.founders}</strong> companies</span>
+        <span><strong style={{ color: C.textSub }}>{sector.themes}</strong> clusters</span>
+        {sector.events > 0 && <span><strong style={{ color: heatColor }}>{sector.events}</strong> breaks this week</span>}
+      </div>
+      {sector.topThemes.length > 0 && (
+        <div style={{ fontSize: 10, color: C.textMuted, fontStyle: "italic", lineHeight: 1.5 }}>
+          {sector.topThemes.slice(0, 2).join(" · ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FlowFundingItem({ item }) {
+  const sectorColors = {
+    "AI / ML": { bg: "#f0fdf4", color: "#166534", border: "#bbf7d0" },
+    "Dev Tools": { bg: C.accentLight, color: C.accent, border: C.accentBorder },
+    "Fintech": { bg: "#fef3c7", color: "#92400e", border: "#fde68a" },
+    "Consumer": { bg: "#fdf4ff", color: "#7e22ce", border: "#f3e8ff" },
+    "Health": { bg: "#fff1f2", color: "#9f1239", border: "#fecdd3" },
+    "Climate": { bg: "#f0fdf4", color: "#14532d", border: "#bbf7d0" },
+    "Enterprise SaaS": { bg: "#eff6ff", color: "#1e40af", border: "#bfdbfe" },
+    "Robotics": { bg: "#fff7ed", color: "#9a3412", border: "#fed7aa" },
+    "Other": { bg: C.bg, color: C.textMuted, border: C.borderLight },
+  };
+  const sc = sectorColors[item.sector] || sectorColors["Other"];
+  return (
+    <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
+      <div style={{
+        padding: "12px 0", borderBottom: `1px solid ${C.borderLight}`,
+      }}
+        onMouseEnter={e => e.currentTarget.style.opacity = "0.8"}
+        onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, flexShrink: 0, marginTop: 1 }}>{item.sector}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: C.text, lineHeight: 1.4 }}>{item.title}</span>
+        </div>
+        <div style={{ fontSize: 10, color: C.textMuted, paddingLeft: 2 }}>{item.source} · {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</div>
+      </div>
+    </a>
+  );
+}
+
+function MarketView() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [euLog, setEuLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("eu_signals") || "[]"); } catch { return []; }
+  });
+  const [euInput, setEuInput] = useState("");
+
+  useEffect(() => {
+    fetch(`${API}/api/flow`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const addEuSignal = () => {
+    if (!euInput.trim()) return;
+    const entry = { text: euInput.trim(), date: new Date().toISOString().slice(0, 10), id: Date.now() };
+    const updated = [entry, ...euLog];
+    setEuLog(updated);
+    localStorage.setItem("eu_signals", JSON.stringify(updated));
+    setEuInput("");
+  };
+
+  const removeEuSignal = (id) => {
+    const updated = euLog.filter(e => e.id !== id);
+    setEuLog(updated);
+    localStorage.setItem("eu_signals", JSON.stringify(updated));
+  };
+
+  if (loading) return (
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.textMuted, fontSize: 13 }}>Loading market signals…</div>
+  );
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 4 }}>Flow</div>
+          <div style={{ fontSize: 13, color: C.textMuted }}>Sector momentum · Recent funding · EU pattern watch</div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 24, alignItems: "start" }}>
+
+          {/* LEFT — Sector heat */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Sector Heat</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {(data?.sectors || []).map(s => <FlowSectorCard key={s.sector} sector={s} />)}
+              {(!data?.sectors || data.sectors.length === 0) && (
+                <div style={{ fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>No sector data yet — run the pipeline to generate clusters.</div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT — Funding pulse + inflections */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+
+            {/* Funding news */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Recent Funding</div>
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "0 16px" }}>
+                {(data?.funding || []).map((item, i) => <FlowFundingItem key={i} item={item} />)}
+                {(!data?.funding || data.funding.length === 0) && (
+                  <div style={{ padding: "20px 0", fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>No funding news loaded — RSS may be unavailable.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Inflections */}
+            {data?.inflections?.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Breaks This Week</div>
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+                  {data.inflections.slice(0, 8).map((inf, i) => (
+                    <div key={i} style={{ padding: "10px 16px", borderBottom: i < Math.min(7, data.inflections.length - 1) ? `1px solid ${C.borderLight}` : "none", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, color: C.text, fontWeight: 600, marginBottom: 2 }}>{inf.company || inf.founderName}</div>
+                        <div style={{ fontSize: 11, color: C.textMuted }}>{inf.signal?.replace(/^[A-Z][a-z]+ [a-z]+ /,"")?.slice(0, 100)}</div>
+                      </div>
+                      <span style={{ fontSize: 10, color: C.textMuted, whiteSpace: "nowrap", marginTop: 2 }}>{inf.detectedAt?.slice(0,10)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* EU Pattern Watch */}
+        <div style={{ marginTop: 32 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>EU Pattern Watch</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>Log EU trends you're tracking — patterns that typically precede US by 12–36 months.</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <input
+              value={euInput}
+              onChange={e => setEuInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addEuSignal()}
+              placeholder="e.g. Secondhand fashion gaining traction in Germany — Vestiaire comps · est. 18 months to US peak"
+              style={{
+                flex: 1, padding: "9px 12px", border: `1px solid ${C.border}`, borderRadius: 8,
+                background: C.surface, fontSize: 12, color: C.text, outline: "none",
+              }} />
+            <button onClick={addEuSignal} style={{
+              padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+              background: C.accent, color: "#fff", border: "none", cursor: "pointer",
+            }}>Log</button>
+          </div>
+          {euLog.length === 0 ? (
+            <div style={{ fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>No EU signals logged yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {euLog.map(entry => (
+                <div key={entry.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{entry.text}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>Logged {entry.date}</div>
+                  </div>
+                  <button onClick={() => removeEuSignal(entry.id)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
@@ -1545,6 +1729,7 @@ export default function App() {
         {view === "field" && <ScoutingView />}
         {view === "patterns" && <ThemesView />}
         {view === "breaks" && <EmergenceView />}
+        {view === "flow" && <MarketView />}
       </div>
     </div>
   );

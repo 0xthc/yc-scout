@@ -617,6 +617,154 @@ def get_pulse(hours: int = Query(48, description="Look-back window in hours")):
     return result
 
 
+@app.get("/api/flow")
+def get_flow():
+    """
+    Flow tab data:
+    - Sector momentum (from themes + anomalies, last 7 days)
+    - Recent funding news (TechCrunch + Newcomer RSS)
+    """
+    cache_key = "flow:v1"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    from datetime import datetime, timezone
+
+    # ── 1. Sector momentum ───────────────────────────────────────────────────
+    with get_db() as conn:
+        themes = conn.execute(
+            """SELECT t.id, t.name, t.sector, t.builder_count,
+                      COUNT(e.id) as recent_events
+               FROM themes t
+               LEFT JOIN emergence_events e
+                 ON e.entity_id = t.id
+                 AND e.entity_type = 'theme'
+                 AND e.detected_at > datetime('now', '-7 days')
+               GROUP BY t.id
+               ORDER BY t.builder_count DESC""",
+        ).fetchall()
+
+        # Aggregate by sector
+        sector_map = defaultdict(lambda: {"themes": 0, "founders": 0, "events": 0, "topThemes": []})
+        for t in themes:
+            s = t["sector"] or "Other"
+            sector_map[s]["themes"] += 1
+            sector_map[s]["founders"] += t["builder_count"] or 0
+            sector_map[s]["events"] += t["recent_events"] or 0
+            if len(sector_map[s]["topThemes"]) < 3:
+                sector_map[s]["topThemes"].append(t["name"])
+
+        sectors = [
+            {
+                "sector": k,
+                "themes": v["themes"],
+                "founders": v["founders"],
+                "events": v["events"],
+                "topThemes": v["topThemes"],
+                "momentum": round((v["events"] * 10) + (v["founders"] * 0.5)),
+            }
+            for k, v in sector_map.items()
+        ]
+        sectors.sort(key=lambda s: -s["momentum"])
+
+        # Recent founder inflections (last 7 days)
+        inflections = conn.execute(
+            """SELECT e.event_type, e.signal, e.detected_at,
+                      f.name as founder_name, f.company, f.incubator, f.score
+               FROM emergence_events e
+               JOIN founders f ON f.id = e.entity_id
+               WHERE e.entity_type = 'founder'
+                 AND e.detected_at > datetime('now', '-7 days')
+               ORDER BY e.detected_at DESC
+               LIMIT 20""",
+        ).fetchall()
+
+        inflection_list = [
+            {
+                "eventType": i["event_type"],
+                "signal": i["signal"],
+                "detectedAt": i["detected_at"],
+                "founderName": i["founder_name"],
+                "company": i["company"] or "",
+                "incubator": i["incubator"] or "",
+                "score": i["score"] or 0,
+            }
+            for i in inflections
+        ]
+
+    # ── 2. Funding news from RSS ─────────────────────────────────────────────
+    RSS_FEEDS = [
+        ("TechCrunch", "https://techcrunch.com/category/venture/feed/"),
+        ("TechCrunch", "https://techcrunch.com/category/startups/feed/"),
+    ]
+    funding_items = []
+    SECTOR_KEYWORDS = {
+        "AI / ML":        ["artificial intelligence", "ai startup", "machine learning", "llm", "foundation model", "generative ai", "ai agent"],
+        "Dev Tools":      ["developer tools", "developer platform", "api", "open source", "devtools", "infrastructure"],
+        "Fintech":        ["fintech", "payments", "banking", "financial", "crypto", "defi", "neobank"],
+        "Consumer":       ["consumer", "marketplace", "d2c", "direct-to-consumer", "social", "creator economy"],
+        "Health":         ["health", "healthtech", "biotech", "digital health", "medtech", "clinical"],
+        "Climate":        ["climate", "cleantech", "energy", "sustainability", "carbon"],
+        "Enterprise SaaS":["enterprise", "saas", "b2b software", "workflow", "automation"],
+        "Robotics":       ["robot", "robotics", "hardware", "autonomous", "drone"],
+    }
+
+    for source_name, rss_url in RSS_FEEDS:
+        try:
+            req = urllib.request.Request(rss_url, headers={"User-Agent": "Precognition/1.0"})
+            xml_data = urllib.request.urlopen(req, timeout=8).read()
+            root = ET.fromstring(xml_data)
+            for item in root.findall(".//item")[:12]:
+                title = (item.findtext("title") or "").strip()
+                link  = (item.findtext("link") or "").strip()
+                pub   = (item.findtext("pubDate") or "").strip()
+                desc  = (item.findtext("description") or "").strip()
+                full  = (title + " " + desc).lower()
+
+                # Skip non-funding articles
+                if not any(kw in full for kw in ["raises", "funding", "seed", "series a", "series b", "million", "backed", "investment", "round"]):
+                    continue
+
+                # Detect sector
+                detected_sector = "Other"
+                for sector, kws in SECTOR_KEYWORDS.items():
+                    if any(kw in full for kw in kws):
+                        detected_sector = sector
+                        break
+
+                funding_items.append({
+                    "title": title,
+                    "url": link,
+                    "source": source_name,
+                    "sector": detected_sector,
+                    "publishedAt": pub,
+                    "snippet": desc[:200].replace("<p>", "").replace("</p>", "") if desc else "",
+                })
+        except Exception as e:
+            logger.warning("RSS fetch failed (%s): %s", rss_url, e)
+
+    # Deduplicate by title
+    seen = set()
+    unique_funding = []
+    for item in funding_items:
+        key = item["title"][:60].lower()
+        if key not in seen:
+            seen.add(key)
+            unique_funding.append(item)
+
+    result = {
+        "sectors": sectors[:12],
+        "inflections": inflection_list,
+        "funding": unique_funding[:20],
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    _cache_set(cache_key, result)
+    return result
+
+
 @app.patch("/api/founders/{founder_id}/notes")
 def update_notes(founder_id: int, body: dict):
     """Update private notes on a founder."""
