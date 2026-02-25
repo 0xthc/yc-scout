@@ -368,6 +368,7 @@ def enrich_founders(conn):
         source_map.setdefault(fid, {})[src] = sid
 
     enriched = 0
+    github_rate_limited = False  # once hit, skip all remaining GitHub enrichment
 
     for founder in founders:
         fid = _row_val(founder, "id") or founder[0]
@@ -381,7 +382,7 @@ def enrich_founders(conn):
             clean_handle = None  # Product-only entries don't have a reusable username
 
         # ── Try GitHub enrichment ────────────────────────
-        if "github" not in existing:
+        if "github" not in existing and not github_rate_limited:
             gh_username = None
 
             # Check if their bio or handle hints at a GitHub username
@@ -401,6 +402,10 @@ def enrich_founders(conn):
                         continue  # Move to next founder after a successful enrichment
                 except Exception as e:
                     logger.warning("GitHub enrichment failed for %s: %s", gh_username, e)
+                    from backend.scrapers.github import RateLimitError
+                    if isinstance(e, RateLimitError):
+                        logger.warning("GitHub rate limit hit — skipping remaining GitHub enrichment this run")
+                        github_rate_limited = True
 
         # ── Try HN enrichment ────────────────────────────
         if "hn" not in existing and clean_handle:

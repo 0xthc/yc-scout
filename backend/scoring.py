@@ -192,5 +192,5 @@ def score_founder(conn, founder_id, founder_info, signals_list):
         "deal_availability": deal_availability,
         "composite": composite,
     }
-    logger.info("Scored founder %d: %s", founder_id, scores)
+    logger.info("Scored founder %s: %s", founder_id, scores)
     return scores

@@ -39,11 +39,20 @@ def _headers():
     return h
 
 
+class RateLimitError(Exception):
+    pass
+
 def _get(path, params=None):
     resp = httpx.get(f"{GH_API}{path}", headers=_headers(), params=params, timeout=15)
     if resp.status_code == 403 and "rate limit" in resp.text.lower():
-        logger.warning("GitHub rate limit hit, sleeping 60s")
-        time.sleep(60)
+        # Check reset time — if long wait, skip rather than block pipeline
+        reset_ts = resp.headers.get("x-ratelimit-reset")
+        wait = (int(reset_ts) - int(time.time())) if reset_ts else 120
+        if wait > 30:
+            logger.warning("GitHub rate limit hit — wait %ds, skipping to avoid pipeline timeout", wait)
+            raise RateLimitError("rate limit exceeded")
+        logger.warning("GitHub rate limit hit, sleeping %ds", wait)
+        time.sleep(wait + 2)
         resp = httpx.get(f"{GH_API}{path}", headers=_headers(), params=params, timeout=15)
     resp.raise_for_status()
     return resp.json()
