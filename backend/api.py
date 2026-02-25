@@ -240,8 +240,11 @@ def _build_founders_batch(conn, rows):
                  GROUP BY founder_id
              ) latest ON ss.founder_id = latest.founder_id AND ss.captured_at = latest.max_at""", fids),
         (f"""SELECT founder_id, source, label, url, strong, detected_at
-             FROM signals WHERE founder_id IN ({ph})
-             ORDER BY detected_at DESC""", fids),
+             FROM (
+               SELECT founder_id, source, label, url, strong, detected_at,
+                 ROW_NUMBER() OVER (PARTITION BY founder_id ORDER BY detected_at DESC) as rn
+               FROM signals WHERE founder_id IN ({ph})
+             ) WHERE rn <= 3""", fids),
     ])
 
     sources_map = defaultdict(list)
@@ -263,7 +266,7 @@ def _build_founders_batch(conn, rows):
     signals_map = defaultdict(list)
     for r in cursors[4].fetchall():
         fid = r["founder_id"]
-        if len(signals_map[fid]) < 20:
+        if len(signals_map[fid]) < 3:
             signals_map[fid].append({
                 "type": r["source"],
                 "label": r["label"],

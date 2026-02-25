@@ -961,12 +961,31 @@ function ScoutingView() {
   const [viewMode, setViewMode] = useState("grouped"); // "grouped" | "list"
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const listRef = useRef(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Fetch full detail (all signals) when a founder is expanded
+  useEffect(() => {
+    if (!selected?.id) return;
+    let cancelled = false;
+    setLoadingDetail(true);
+    fetch(`${API}/api/founders/${selected.id}`)
+      .then(r => r.json())
+      .then(full => {
+        if (!cancelled) {
+          setSelected(full);
+          setFounders(prev => prev.map(f => f.id === full.id ? { ...f, signals: full.signals } : f));
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingDetail(false); });
+    return () => { cancelled = true; };
+  }, [selected?.id]);
 
   // Grouped mode fetches all at once; list mode paginates
   const buildUrl = useCallback((offset = 0) => {
@@ -979,11 +998,32 @@ function ScoutingView() {
 
   const fetchFounders = useCallback(async (reset = false) => {
     if (reset) setLoading(true);
+    const url = buildUrl(0);
+    const cacheKey = `founders_cache:${url}`;
+    const TTL = 5 * 60 * 1000; // 5 minutes
     try {
-      const res = await fetch(buildUrl(0));
+      // Try sessionStorage cache first
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const { data, ts } = JSON.parse(cached);
+          if (Date.now() - ts < TTL) {
+            setFounders(data.founders || []);
+            setTotal(data.total || 0);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (_) { /* ignore storage errors */ }
+
+      const res = await fetch(url);
       const data = await res.json();
       setFounders(data.founders || []);
       setTotal(data.total || 0);
+
+      // Store in cache
+      try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })); }
+      catch (_) { /* ignore quota errors */ }
     } finally { setLoading(false); }
   }, [buildUrl]);
 
