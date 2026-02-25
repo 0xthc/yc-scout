@@ -9,6 +9,7 @@ Supported: Techstars · 500 Global · Plug and Play · a16z Speedrun · HF0 · P
 
 import json
 import logging
+import re
 import time
 import urllib.request
 import urllib.parse
@@ -70,13 +71,16 @@ def _parse_hn_hit(hit: dict, incubator: str) -> dict | None:
     if url:
         domain = url.replace("https://", "").replace("http://", "").split("/")[0]
 
+    handle = re.sub(r"[^a-z0-9]", "", name.lower())[:40] or "co"
+    inc_slug = re.sub(r"[^a-z0-9]", "", incubator.lower())[:10]
     return {
         "name": name,
+        "handle": f"{handle}_{inc_slug}" if inc_slug else handle,
         "bio": one_liner,
         "domain": domain,
         "company": name,
         "incubator": incubator,
-        "sources": ["hn"],
+        "sources": [],
         "tags": [],
         "location": "",
         "stage": "Seed",
@@ -117,6 +121,12 @@ def _upsert_founder(conn, f: dict) -> int:
         founder_id = existing["id"]
         inserted = 0
     else:
+        # Generate a unique handle by slugifying the company name
+        base_handle = re.sub(r"[^a-z0-9]", "", f["name"].lower())[:40] or "co"
+        # Ensure uniqueness by appending incubator slug if needed
+        inc_slug = re.sub(r"[^a-z0-9]", "", f["incubator"].lower())[:10]
+        handle = f"{base_handle}_{inc_slug}" if inc_slug else base_handle
+
         conn.execute(
             """INSERT INTO founders
                (name, handle, avatar, bio, domain, company, location, stage,
@@ -124,7 +134,7 @@ def _upsert_founder(conn, f: dict) -> int:
                VALUES (?,?,?,?,?,?,?,?,?,?,?,'to_contact','startup', CURRENT_TIMESTAMP)""",
             (
                 f["name"],
-                f.get("handle", ""),
+                handle,
                 f["name"][:2].upper(),
                 f.get("bio", ""),
                 f.get("domain", ""),
@@ -139,7 +149,10 @@ def _upsert_founder(conn, f: dict) -> int:
         founder_id = conn.execute("SELECT last_insert_rowid() as id").fetchone()["id"]
         inserted = 1
 
+    VALID_SOURCES = {"github", "hn", "producthunt"}
     for src in f.get("sources", []):
+        if src not in VALID_SOURCES:
+            continue
         exists = conn.execute(
             "SELECT 1 FROM founder_sources WHERE founder_id = ? AND source = ?",
             (founder_id, src),

@@ -179,16 +179,7 @@ def _upsert_founder(conn, f: dict) -> int:
         founder_id = conn.execute("SELECT last_insert_rowid() as id").fetchone()["id"]
         inserted = 1
 
-    # Upsert source
-    src_exists = conn.execute(
-        "SELECT 1 FROM founder_sources WHERE founder_id = ? AND source = 'yc'",
-        (founder_id,),
-    ).fetchone()
-    if not src_exists:
-        conn.execute(
-            "INSERT INTO founder_sources (founder_id, source) VALUES (?, 'yc')",
-            (founder_id,),
-        )
+    # YC companies are identified by incubator field — no signal source insertion needed
 
     # Upsert tags
     existing_tags = {
