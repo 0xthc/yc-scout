@@ -26,7 +26,7 @@ from backend.db import get_db, init_db
 from backend.embedder import embed_all_founders
 from backend.enrichment import enrich_qualified_founders
 from backend.scoring import score_founder
-from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, enrich_founders, scrape_yc, scrape_accelerators
+from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, scrape_indiehackers, enrich_founders, scrape_yc, scrape_accelerators
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,6 +61,11 @@ def run_pipeline():
             founders_scraped += scrape_producthunt(conn)
         except Exception as e:
             logger.error("Product Hunt scraper failed: %s", e)
+
+        try:
+            founders_scraped += scrape_indiehackers(conn)
+        except Exception as e:
+            logger.error("Indie Hackers scraper failed: %s", e)
 
         # YC batch scraper — runs every time but upserts are idempotent (fast after first run)
         try:

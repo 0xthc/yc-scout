@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS founders (
 CREATE TABLE IF NOT EXISTS founder_sources (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
-    source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt')),
+    source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers')),
     source_id   TEXT DEFAULT '',
     profile_url TEXT DEFAULT '',
     UNIQUE(founder_id, source)
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS founder_tags (
 CREATE TABLE IF NOT EXISTS signals (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
-    source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt')),
+    source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers')),
     label       TEXT NOT NULL,
     url         TEXT DEFAULT '',
     strong      BOOLEAN DEFAULT 0,
@@ -406,6 +406,59 @@ def _migrate_scores_columns(conn):
             conn.execute(f"ALTER TABLE founders ADD COLUMN {col} {definition}")
         except Exception:
             pass  # Column already exists
+
+    # Expand CHECK constraint on founder_sources + signals to include 'indiehackers'
+    # SQLite/libsql can't ALTER a CHECK constraint, so we recreate the tables.
+    _migrate_source_check(conn)
+
+
+def _migrate_source_check(conn):
+    """Recreate founder_sources and signals with expanded source CHECK (adds indiehackers)."""
+    # Check if migration already applied by probing the schema
+    try:
+        schema_row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='founder_sources'"
+        ).fetchone()
+        sql = (schema_row[0] if schema_row else "") or ""
+        if "indiehackers" in sql:
+            return  # Already migrated
+    except Exception:
+        return
+
+    try:
+        conn.executescript("""
+            PRAGMA foreign_keys=OFF;
+
+            CREATE TABLE IF NOT EXISTS founder_sources_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
+                source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers')),
+                source_id   TEXT DEFAULT '',
+                profile_url TEXT DEFAULT '',
+                UNIQUE(founder_id, source)
+            );
+            INSERT OR IGNORE INTO founder_sources_new SELECT * FROM founder_sources;
+            DROP TABLE founder_sources;
+            ALTER TABLE founder_sources_new RENAME TO founder_sources;
+
+            CREATE TABLE IF NOT EXISTS signals_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
+                source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers')),
+                label       TEXT NOT NULL,
+                url         TEXT DEFAULT '',
+                strong      BOOLEAN DEFAULT 0,
+                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT OR IGNORE INTO signals_new SELECT * FROM signals;
+            DROP TABLE signals;
+            ALTER TABLE signals_new RENAME TO signals;
+
+            PRAGMA foreign_keys=ON;
+        """)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Source CHECK migration failed (may already be applied): %s", e)
 
 
 # ── Data helpers ─────────────────────────────────────────────
