@@ -203,6 +203,7 @@ def scrape_indiehackers(conn, pages=None):
                     handle=f"@ih-{author.lower()}",
                     bio=f"Indie Hacker — {title[:200]}",
                     company=post["slug"].replace("-", " ").title(),
+                    entity_type="startup",
                 )
 
             # Add IH as a source
