@@ -1199,6 +1199,27 @@ function FieldLegend({ total, filtered, scoutLabel }) {
 // ── Scout Modes ─────────────────────────────────────────────────────────────
 const sb = f => f.scoreBreakdown || {};
 
+const VERTICALS = [
+  { key: "all",          label: "All" },
+  { key: "consumer",     label: "Consumer",       tags: ["consumer", "d2c", "food", "retail", "fashion", "beauty", "wellness", "pet", "parenting", "travel"] },
+  { key: "fintech",      label: "Fintech",         tags: ["fintech", "finance", "banking", "payments", "insurance", "insurtech", "crypto", "defi", "lending", "wealth"] },
+  { key: "health",       label: "Digital Health",  tags: ["health", "healthcare", "medical", "biotech", "mental health", "wellness", "clinical", "pharma", "medtech"] },
+  { key: "enterprise",   label: "Enterprise",      tags: ["enterprise", "b2b", "productivity", "workflow", "hr", "sales", "crm", "operations", "procurement"] },
+  { key: "saas",         label: "SaaS",            tags: ["saas", "software", "api", "developer tools", "devtools", "infrastructure", "security", "data"] },
+  { key: "hardware",     label: "Hardware",        tags: ["hardware", "iot", "robotics", "devices", "wearable", "manufacturing"] },
+  { key: "marketplaces", label: "Marketplaces",    tags: ["marketplace", "platform", "gig", "two-sided", "network"] },
+  { key: "education",    label: "Education",       tags: ["education", "edtech", "learning", "training", "skills"] },
+  { key: "media",        label: "Media",           tags: ["media", "content", "social", "creator", "gaming", "entertainment"] },
+]
+
+function matchesVertical(founder, verticalKey) {
+  if (verticalKey === "all") return true;
+  const v = VERTICALS.find(v => v.key === verticalKey);
+  if (!v) return true;
+  const tagStr = ((founder.tags || []).join(" ") + " " + (founder.bio || "") + " " + (founder.domain || "")).toLowerCase();
+  return v.tags.some(t => tagStr.includes(t));
+}
+
 const SCOUT_MODES = [
   {
     key: "all",
@@ -1301,6 +1322,7 @@ function ScoutingView() {
   const [debSearch, setDebSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [scoutModeKey, setScoutModeKey] = useState("all");
+  const [verticalFilter, setVerticalFilter] = useState("all");
   const [showIndividuals, setShowIndividuals] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1313,17 +1335,19 @@ function ScoutingView() {
   const visibleStartups = useMemo(() => {
     return [...founders]
       .filter(f => f.entityType === "startup" || (!f.entityType && !!f.incubator))
+      .filter(f => matchesVertical(f, verticalFilter))
       .filter(scoutMode.filter)
       .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
-  }, [founders, scoutMode]);
+  }, [founders, scoutMode, verticalFilter]);
 
   // Individuals: no incubator, entityType !== startup
   const visibleIndividuals = useMemo(() => {
     return [...founders]
       .filter(f => f.entityType !== "startup" && !f.incubator)
+      .filter(f => matchesVertical(f, verticalFilter))
       .filter(scoutMode.filter)
       .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
-  }, [founders, scoutMode]);
+  }, [founders, scoutMode, verticalFilter]);
 
   // Legacy: needed for FieldLegend filtered count
   const applyScout = useCallback((list) => {
@@ -1444,6 +1468,26 @@ function ScoutingView() {
                 {scoutMode.shortDesc}
               </div>
             )}
+          </div>
+
+          {/* Vertical filter row */}
+          <div>
+            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Vertical</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {VERTICALS.map(v => {
+                const active = verticalFilter === v.key;
+                return (
+                  <button key={v.key} onClick={() => setVerticalFilter(v.key)} style={{
+                    padding: "3px 9px", borderRadius: 20, fontSize: 10, fontWeight: 500,
+                    cursor: "pointer",
+                    border: active ? "none" : `1px solid ${C.border}`,
+                    background: active ? C.accent : C.surface,
+                    color: active ? "#fff" : C.textSub,
+                    transition: "all 0.15s",
+                  }}>{v.label}</button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Status filter row */}
