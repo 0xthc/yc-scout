@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /api/stats
+    healthCheckPath: /api/health
     envVars:
       # Database (Turso — required for production)
       - key: TURSO_DATABASE_URL

@@ -37,7 +37,11 @@ def _cache_set(key, data):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    try:
+        init_db()
+        logger.info("DB init complete")
+    except Exception as e:
+        logger.error("DB init failed (continuing anyway): %s", e)
     yield
 
 
@@ -49,6 +53,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+@app.get("/api/health")
+def health():
+    """Always returns 200 — used by Render health check."""
+    return {"status": "ok"}
 
 
 def _get_score(row, new_key, old_key):
