@@ -1,4 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { HUSTLE_PORTFOLIO } from "./hustlePortfolio";
+import { CONVICTION_PORTFOLIO } from "./convictionPortfolio";
+import { FIRST_ROUND_PORTFOLIO } from "./firstRoundPortfolio";
+import { PRECURSOR_PORTFOLIO } from "./precursorPortfolio";
+import { SPC_PORTFOLIO } from "./spcPortfolio";
+import { OMNI_PORTFOLIO } from "./omniPortfolio";
 
 const API = import.meta.env.VITE_API_URL || "";
 
@@ -1847,9 +1853,154 @@ function MarketView() {
 
 // ── Root App ──────────────────────────────────────────────────
 
+// ── Flow Drawer — fund portfolio reference layer ─────────────────────────────
+
+const FLOW_FUNDS = [
+  { key: 'hustle',     name: 'Hustle Fund',  stage: 'Pre-seed',    data: HUSTLE_PORTFOLIO },
+  { key: 'conviction', name: 'Conviction',   stage: 'Seed–A',      data: CONVICTION_PORTFOLIO },
+  { key: 'firstround', name: 'First Round',  stage: 'Seed',        data: FIRST_ROUND_PORTFOLIO },
+  { key: 'precursor',  name: 'Precursor',    stage: 'Pre-seed',    data: PRECURSOR_PORTFOLIO },
+  { key: 'spc',        name: 'SPC',          stage: 'Exploration', data: SPC_PORTFOLIO },
+  { key: 'omni',       name: 'Omni',         stage: 'Seed',        data: OMNI_PORTFOLIO },
+]
+
+const FLOW_THEMES = ['AI Native','AI Infra','Dev Tools','Consumer AI','D2C Consumer','Future of Work','Fintech','Health & Longevity','Deep Tech']
+const FLOW_THEME_COLORS = {
+  'AI Native': '#6366f1', 'AI Infra': '#7c3aed', 'Dev Tools': '#0284c7',
+  'Consumer AI': '#db2777', 'D2C Consumer': '#d97706', 'Future of Work': '#059669',
+  'Fintech': '#0891b2', 'Health & Longevity': '#16a34a', 'Deep Tech': '#64748b',
+}
+
+function FlowDrawer({ open, onClose }) {
+  const [activeFund, setActiveFund] = useState('conviction')
+  const [activeTheme, setActiveTheme] = useState('All')
+  const [search, setSearch] = useState('')
+  const [viewMode, setViewMode] = useState('thematic') // 'thematic' | 'vertical'
+
+  const fund = FLOW_FUNDS.find(f => f.key === activeFund)
+  const allCompanies = useMemo(() => fund.data.flatMap(g => g.companies), [fund])
+
+  const visible = useMemo(() => {
+    let base = viewMode === 'thematic'
+      ? (activeTheme === 'All' ? allCompanies : allCompanies.filter(c => c.theme === activeTheme))
+      : allCompanies
+    if (!search.trim()) return base
+    const q = search.toLowerCase()
+    return base.filter(c => c.name.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q))
+  }, [viewMode, activeTheme, allCompanies, search])
+
+  if (!open) return null
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', zIndex: 400,
+      }} />
+      {/* Drawer */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: 400,
+        background: '#fff', zIndex: 401, display: 'flex', flexDirection: 'column',
+        boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid #e8e8e5', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Flow</div>
+              <div style={{ fontSize: 11, color: '#999', marginTop: 1 }}>Fund portfolio reference</div>
+            </div>
+            <button onClick={onClose} style={{
+              background: 'none', border: '1px solid #e0e0dc', borderRadius: 6,
+              padding: '4px 10px', cursor: 'pointer', fontSize: 12, color: '#666',
+            }}>✕ Close</button>
+          </div>
+          {/* Fund pills */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {FLOW_FUNDS.map(f => (
+              <button key={f.key} onClick={() => { setActiveFund(f.key); setActiveTheme('All') }} style={{
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                border: activeFund === f.key ? '1.5px solid #1a1a1a' : '1px solid #e0e0dc',
+                background: activeFund === f.key ? '#1a1a1a' : '#f8f8f6',
+                color: activeFund === f.key ? '#fff' : '#555',
+              }}>
+                {f.name} <span style={{ fontWeight: 400, opacity: 0.7 }}>{f.stage}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* View toggle + theme filter */}
+        <div style={{ padding: '10px 18px 8px', borderBottom: '1px solid #f0f0ee', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            {[['thematic','By Theme'],['vertical','By Vertical']].map(([m,l]) => (
+              <button key={m} onClick={() => { setViewMode(m); setActiveTheme('All') }} style={{
+                padding: '4px 10px', borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                border: viewMode === m ? '1.5px solid #1a1a1a' : '1px solid #e0e0dc',
+                background: viewMode === m ? '#1a1a1a' : '#f8f8f6',
+                color: viewMode === m ? '#fff' : '#666',
+              }}>{l}</button>
+            ))}
+          </div>
+          {viewMode === 'thematic' && (
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {['All', ...FLOW_THEMES.filter(t => allCompanies.some(c => c.theme === t))].map(t => {
+                const color = FLOW_THEME_COLORS[t] || '#888'
+                const active = activeTheme === t
+                return (
+                  <button key={t} onClick={() => setActiveTheme(t)} style={{
+                    padding: '3px 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                    background: active ? color : '#f5f5f3',
+                    color: active ? '#fff' : color || '#666',
+                    border: `1px solid ${active ? color : '#e8e8e5'}`,
+                  }}>{t} {t !== 'All' && <span style={{ opacity: 0.7 }}>{allCompanies.filter(c => c.theme === t).length}</span>}</button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '8px 18px', borderBottom: '1px solid #f0f0ee', flexShrink: 0 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search companies…"
+            style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #e0e0dc', fontSize: 11, color: '#1a1a1a', outline: 'none', background: '#fafaf8' }}
+          />
+        </div>
+
+        {/* Company list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+          <div style={{ fontSize: 10, color: '#aaa', marginBottom: 6, paddingLeft: 4 }}>
+            {visible.length} companies · {fund.name}
+          </div>
+          {visible.map((c, i) => {
+            const tc = FLOW_THEME_COLORS[c.theme] || '#888'
+            return (
+              <a key={i} href={c.url || '#'} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <div style={{
+                  padding: '9px 10px', borderRadius: 8, marginBottom: 5,
+                  border: '1px solid #f0f0ee', background: '#fafaf8',
+                }} onMouseEnter={e => e.currentTarget.style.background = '#f4f4f0'}
+                   onMouseLeave={e => e.currentTarget.style.background = '#fafaf8'}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a1a' }}>{c.name}</span>
+                    {c.theme && <span style={{ fontSize: 9, fontWeight: 700, color: tc, background: `${tc}14`, border: `1px solid ${tc}30`, borderRadius: 4, padding: '1px 5px' }}>{c.theme}</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#666', lineHeight: 1.4 }}>{c.desc}</div>
+                </div>
+              </a>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function App() {
   const [view, setView] = useState("field");
   const [stats, setStats] = useState({ total: 0, strong: 0, toContact: 0, avgScore: 0 });
+  const [flowDrawerOpen, setFlowDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!API) return;
@@ -1859,13 +2010,27 @@ export default function App() {
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: C.bg, color: C.text, fontFamily: "Inter, system-ui, sans-serif" }}>
       <TopNav view={view} setView={setView} stats={stats} />
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", position: 'relative' }}>
         {view === "raw" && <PulseView />}
         {view === "field" && <ScoutingView />}
         {view === "patterns" && <ThemesView />}
         {view === "breaks" && <EmergenceView />}
         {view === "flow" && <MarketView />}
+
+        {/* Flow drawer toggle — always visible */}
+        {!flowDrawerOpen && (
+          <button onClick={() => setFlowDrawerOpen(true)} style={{
+            position: 'fixed', bottom: 28, right: 24, zIndex: 300,
+            background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 10,
+            padding: '9px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+            display: 'flex', alignItems: 'center', gap: 7,
+          }}>
+            <span style={{ fontSize: 13 }}>⟐</span> Fund Portfolio
+          </button>
+        )}
       </div>
+      <FlowDrawer open={flowDrawerOpen} onClose={() => setFlowDrawerOpen(false)} />
     </div>
   );
 }
