@@ -562,8 +562,9 @@ function ThemesView() {
                       onMouseEnter={e => e.currentTarget.style.background = "#f0f0ec"}
                       onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafaf8"}
                     >
-                      <td style={{ padding: "10px 16px", fontWeight: 600, color: C.text, maxWidth: 260 }}>
+                      <td style={{ padding: "10px 16px", fontWeight: 600, color: C.text, maxWidth: 280 }}>
                         <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
+                        {t.painSummary && <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 400, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.painSummary}</div>}
                       </td>
                       <td style={{ padding: "10px 16px" }}>
                         {t.sector && <Badge color="#666" bg="#f4f4f1" border="#e0e0dc" style={{ fontSize: 11 }}>{t.sector}</Badge>}
