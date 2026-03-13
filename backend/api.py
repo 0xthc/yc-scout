@@ -446,7 +446,7 @@ def list_themes(limit: int = 150):
         for t in rows:
             theme_id = t["id"]
             founders = conn.execute(
-                """SELECT f.id, f.name, f.handle, f.company, f.domain, f.bio,
+                """SELECT f.id, f.name, f.handle, f.company, f.domain, f.bio, f.incubator,
                           (SELECT composite FROM scores WHERE founder_id = f.id ORDER BY scored_at DESC LIMIT 1) as score
                    FROM founders f
                    JOIN founder_themes ft ON ft.founder_id = f.id
@@ -455,11 +455,14 @@ def list_themes(limit: int = 150):
                 (theme_id,),
             ).fetchall()
 
+            funded_count = sum(1 for f in founders if f["incubator"] and f["incubator"].strip())
+
             themes.append({
                 "id": theme_id,
                 "name": t["name"],
                 "emergenceScore": t["emergence_score"],
                 "builderCount": t["builder_count"],
+                "fundedCount": funded_count,
                 "weeklyVelocity": t["weekly_velocity"],
                 "painSummary": t["pain_summary"],
                 "description": t["pain_summary"],
@@ -477,6 +480,7 @@ def list_themes(limit: int = 150):
                         "domain": f["domain"] or "",
                         "bio": f["bio"] or "",
                         "score": round(f["score"]) if f["score"] else 0,
+                        "incubator": f["incubator"] or "",
                     }
                     for f in founders
                 ],

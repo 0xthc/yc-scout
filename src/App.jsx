@@ -224,6 +224,29 @@ function ThemeCard({ theme, onClick }) {
           <div style={{ fontSize: 18, fontWeight: 700, color: velColor, fontFamily: "ui-monospace, monospace" }}>{vel > 0 ? "+" : ""}{velPct}%</div>
           <div style={{ fontSize: 10, color: C.textMuted }}>WoW growth</div>
         </div>
+        {theme.fundedCount !== undefined && (
+          <>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.textSub, fontFamily: "ui-monospace, monospace" }}>{theme.fundedCount}</div>
+              <div style={{ fontSize: 10, color: C.textMuted }}>Funded</div>
+            </div>
+            <div>
+              {(() => {
+                const total = theme.builderCount || 1;
+                const funded = theme.fundedCount || 0;
+                const satPct = Math.round((funded / total) * 100);
+                const satColor = satPct >= 60 ? C.red : satPct >= 30 ? "#d97706" : C.green;
+                const satLabel = satPct >= 60 ? "Crowded" : satPct >= 30 ? "Active" : "Open";
+                return (
+                  <>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: satColor, fontFamily: "ui-monospace, monospace" }}>{satPct}%</div>
+                    <div style={{ fontSize: 10, color: satColor, fontWeight: 600 }}>{satLabel}</div>
+                  </>
+                );
+              })()}
+            </div>
+          </>
+        )}
       </div>
 
       {theme.painSummary && (
