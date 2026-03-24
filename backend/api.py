@@ -457,6 +457,28 @@ def trigger_yc_scrape():
     return {"status": "started", "message": "YC scrape running in background"}
 
 
+@app.post("/api/pipeline/recluster")
+def trigger_recluster():
+    """Re-run clustering + scoring only (no scraping). Returns immediately, runs in background."""
+    import threading
+    from backend.clustering import cluster_founders
+    from backend.scoring import score_all
+
+    def _run():
+        try:
+            with get_db() as conn:
+                n = cluster_founders(conn)
+                score_all(conn)
+            _cache.clear()
+            logger.info("Background recluster complete: %d themes", n)
+        except Exception as e:
+            logger.error("Background recluster failed: %s", e)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return {"status": "started", "message": "Reclustering running in background (~2 min)"}
+
+
 @app.get("/api/themes")
 def list_themes(limit: int = 150):
     """List all detected theme clusters sorted by emergence score."""
