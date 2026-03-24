@@ -459,9 +459,12 @@ def trigger_yc_scrape():
 
 @app.post("/api/pipeline/recluster")
 def trigger_recluster():
-    """Re-run clustering + scoring only (no scraping). Returns immediately, runs in background."""
+    """Re-run clustering only (no scraping). Returns immediately, runs in background."""
     import threading
-    from backend.clustering import cluster_founders
+    try:
+        from backend.clustering import cluster_founders
+    except Exception as e:
+        return {"status": "error", "message": f"Import failed: {e}"}
 
     def _run():
         try:
@@ -470,7 +473,7 @@ def trigger_recluster():
             _cache.clear()
             logger.info("Background recluster complete: %d themes", n)
         except Exception as e:
-            logger.error("Background recluster failed: %s", e)
+            logger.error("Background recluster failed: %s", e, exc_info=True)
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
