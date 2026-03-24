@@ -99,9 +99,11 @@ def _company_to_founder(company: dict) -> dict:
     else:
         stage = "Growth"
 
+    slug = company.get("slug") or name.lower().replace(" ", "-")
+    batch_lower = batch.lower()
     return {
         "name": name,
-        "handle": f"@{company.get('slug', '')}",
+        "handle": f"@yc-{batch_lower}-{slug}",
         "avatar": name[:2].upper() if name else "YC",
         "bio": one_liner,
         "domain": domain,
