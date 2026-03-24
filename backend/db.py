@@ -237,7 +237,7 @@ class _TursoConnection:
         http_url = url.replace("libsql://", "https://").rstrip("/")
         self._url = f"{http_url}/v3/pipeline"
         self._headers = {"Authorization": f"Bearer {token}"}
-        self._client = httpx.Client(timeout=30)
+        self._client = httpx.Client(timeout=120)
 
     def _pipeline(self, requests):
         resp = self._client.post(
