@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS alert_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_signals_founder ON signals(founder_id, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_signals_dedup ON signals(founder_id, label, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scores_founder ON scores(founder_id, scored_at DESC);
 CREATE INDEX IF NOT EXISTS idx_stats_founder ON stats_snapshots(founder_id, captured_at DESC);
 
@@ -341,10 +342,18 @@ def get_db():
         conn.close()
 
 
+_init_done = False
+
+
 def init_db():
+    global _init_done
+    if _init_done:
+        return
     with get_db() as conn:
         conn.executescript(SCHEMA)
         _migrate_scores_columns(conn)
+        prune_history(conn)
+    _init_done = True
 
 
 # Column mapping: old name → new name
@@ -407,32 +416,41 @@ def _migrate_scores_columns(conn):
         except Exception:
             pass  # Column already exists
 
-    # Expand CHECK constraint on founder_sources + signals to include 'indiehackers'
+    # Expand CHECK constraint on founder_sources + signals to include 'indiehackers' and 'yc'
     # SQLite/libsql can't ALTER a CHECK constraint, so we recreate the tables.
     _migrate_source_check(conn)
 
 
+_source_check_done = False
+
+
 def _migrate_source_check(conn):
-    """Recreate founder_sources and signals with expanded source CHECK (adds indiehackers)."""
+    """Recreate founder_sources and signals with expanded source CHECK (adds indiehackers, yc)."""
+    global _source_check_done
+    if _source_check_done:
+        return
     # Check if migration already applied by probing the schema
     try:
         schema_row = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='founder_sources'"
         ).fetchone()
         sql = (schema_row[0] if schema_row else "") or ""
-        if "indiehackers" in sql:
+        if "'yc'" in sql:
+            _source_check_done = True
             return  # Already migrated
     except Exception:
+        _source_check_done = True
         return
 
     try:
         conn.executescript("""
+            BEGIN;
             PRAGMA foreign_keys=OFF;
 
             CREATE TABLE IF NOT EXISTS founder_sources_new (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
-                source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers')),
+                source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers','yc')),
                 source_id   TEXT DEFAULT '',
                 profile_url TEXT DEFAULT '',
                 UNIQUE(founder_id, source)
@@ -444,7 +462,7 @@ def _migrate_source_check(conn):
             CREATE TABLE IF NOT EXISTS signals_new (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
-                source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers')),
+                source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers','yc')),
                 label       TEXT NOT NULL,
                 url         TEXT DEFAULT '',
                 strong      BOOLEAN DEFAULT 0,
@@ -455,10 +473,47 @@ def _migrate_source_check(conn):
             ALTER TABLE signals_new RENAME TO signals;
 
             PRAGMA foreign_keys=ON;
+            COMMIT;
         """)
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Source CHECK migration failed (may already be applied): %s", e)
+    _source_check_done = True
+
+
+# ── History pruning ──────────────────────────────────────────
+
+# Keep the N most-recent rows per entity so unbounded tables don't balloon.
+_KEEP_ROWS = 48  # 2 days of hourly snapshots
+
+
+def prune_history(conn, keep: int = _KEEP_ROWS) -> None:
+    """Delete old rows from computed time-series tables.
+
+    Only prunes scores and theme_history — these are re-computed every run and
+    only recent rows are ever used. stats_snapshots is scraped data and is NOT pruned.
+    """
+    try:
+        conn.executescript(f"""
+            DELETE FROM scores
+            WHERE id NOT IN (
+                SELECT id FROM scores s2
+                WHERE s2.founder_id = scores.founder_id
+                ORDER BY scored_at DESC
+                LIMIT {keep}
+            );
+
+            DELETE FROM theme_history
+            WHERE id NOT IN (
+                SELECT id FROM theme_history t2
+                WHERE t2.theme_id = theme_history.theme_id
+                ORDER BY captured_at DESC
+                LIMIT {keep}
+            );
+        """)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("prune_history failed: %s", e)
 
 
 # ── Data helpers ─────────────────────────────────────────────

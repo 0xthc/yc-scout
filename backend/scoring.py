@@ -47,9 +47,36 @@ def _parse_dt(value):
         return None
 
 
+_YC_BATCH_BONUS = {
+    # Current batch — actively fundraising right now
+    "W26": 20, "S26": 20,
+    # Previous batch — window mostly closed
+    "W25": 8, "S25": 8,
+    # Older — likely raised or dead
+    "W24": 2, "S24": 2,
+}
+
+
+def _batch_recency_bonus(incubator: str) -> int:
+    """Return a recency bonus based on YC batch. Newer = higher score."""
+    if not incubator:
+        return 0
+    for batch, bonus in _YC_BATCH_BONUS.items():
+        if batch in incubator:
+            return bonus
+    # Any older YC batch still gets a small base credit
+    if "YC" in incubator:
+        return 1
+    return 0
+
+
 def _score_founder_pedigree(founder_info: dict) -> int:
     bio = (founder_info.get("bio") or "").lower()
+    incubator = founder_info.get("incubator") or ""
     score = 0
+
+    # Batch recency bonus — W26 fundraising now is the strongest signal
+    score += _batch_recency_bonus(incubator)
 
     if "yc" in bio or "y combinator" in bio:
         score += 20
