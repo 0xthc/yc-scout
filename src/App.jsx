@@ -1359,6 +1359,20 @@ function matchesVertical(founder, verticalKey) {
   return v.tags.some(t => tagStr.includes(t));
 }
 
+const YC_BATCHES = [
+  { key: "all",    label: "All" },
+  { key: "W26",    label: "YC W26", color: "#FF6600" },
+  { key: "S25",    label: "YC S25", color: "#e65c00" },
+  { key: "W25",    label: "YC W25", color: "#cc5200" },
+  { key: "yc_any", label: "YC (any)", color: "#a34200" },
+];
+
+function matchesBatch(founder, batchKey) {
+  if (batchKey === "all") return true;
+  if (batchKey === "yc_any") return !!founder.incubator && founder.incubator.startsWith("YC");
+  return (founder.incubator || "").includes(batchKey);
+}
+
 const SCOUT_MODES = [
   {
     key: "all",
@@ -1462,6 +1476,7 @@ function ScoutingView() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [scoutModeKey, setScoutModeKey] = useState("all");
   const [verticalFilter, setVerticalFilter] = useState("all");
+  const [batchFilter, setBatchFilter] = useState("all");
   const [showIndividuals, setShowIndividuals] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1475,15 +1490,17 @@ function ScoutingView() {
     return [...founders]
       .filter(f => f.entityType === "startup" || (!f.entityType && !!f.incubator))
       .filter(f => matchesVertical(f, verticalFilter))
+      .filter(f => matchesBatch(f, batchFilter))
       .filter(scoutMode.filter)
       .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
-  }, [founders, scoutMode, verticalFilter]);
+  }, [founders, scoutMode, verticalFilter, batchFilter]);
 
   // Individuals: no incubator, entityType !== startup
   const visibleIndividuals = useMemo(() => {
     return [...founders]
       .filter(f => f.entityType !== "startup" && !f.incubator)
       .filter(f => matchesVertical(f, verticalFilter))
+      .filter(f => batchFilter === "all")
       .filter(scoutMode.filter)
       .sort((a, b) => scoutMode.sort(b) - scoutMode.sort(a));
   }, [founders, scoutMode, verticalFilter]);
@@ -1624,6 +1641,26 @@ function ScoutingView() {
                     color: active ? "#fff" : C.textSub,
                     transition: "all 0.15s",
                   }}>{v.label}</button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* YC Batch filter row */}
+          <div>
+            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Batch</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {YC_BATCHES.map(b => {
+                const active = batchFilter === b.key;
+                return (
+                  <button key={b.key} onClick={() => setBatchFilter(b.key)} style={{
+                    padding: "3px 9px", borderRadius: 20, fontSize: 10, fontWeight: 600,
+                    cursor: "pointer",
+                    border: active ? "none" : `1px solid ${C.border}`,
+                    background: active ? (b.color || C.accent) : C.surface,
+                    color: active ? "#fff" : C.textSub,
+                    transition: "all 0.15s",
+                  }}>{b.label}</button>
                 );
               })}
             </div>
