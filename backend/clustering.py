@@ -218,17 +218,41 @@ def _classify_founder_origin(conn, founder_ids: list[int]) -> str:
 def cluster_founders(conn) -> int:
     """
     Run HDBSCAN on all founder embeddings, detect themes, persist results.
+    Only clusters startup entities (entity_type='startup', incubator set, or company field filled).
     Returns number of themes upserted.
     """
     from backend.embedder import load_embeddings
 
-    founder_ids, matrix = load_embeddings(conn)
+    all_ids, all_matrix = load_embeddings(conn)
 
-    if len(founder_ids) < MIN_CLUSTER_SIZE:
-        logger.info("Not enough founders to cluster (%d < %d)", len(founder_ids), MIN_CLUSTER_SIZE)
+    if not all_ids:
+        logger.info("No embeddings found")
         return 0
 
-    logger.info("Clustering %d founders", len(founder_ids))
+    # Filter to startup entities only — exclude individual GitHub/HN developers
+    startup_rows = conn.execute(
+        """SELECT id FROM founders
+           WHERE entity_type = 'startup'
+              OR (incubator IS NOT NULL AND incubator != '')
+              OR (company IS NOT NULL AND company != '' AND company != name)"""
+    ).fetchall()
+    startup_id_set = {r["id"] for r in startup_rows}
+
+    if startup_id_set:
+        filtered = [(fid, vec) for fid, vec in zip(all_ids, all_matrix) if fid in startup_id_set]
+        if filtered:
+            founder_ids = [f[0] for f in filtered]
+            matrix = np.array([f[1] for f in filtered], dtype=np.float32)
+        else:
+            founder_ids, matrix = all_ids, all_matrix
+    else:
+        founder_ids, matrix = all_ids, all_matrix
+
+    if len(founder_ids) < MIN_CLUSTER_SIZE:
+        logger.info("Not enough startups to cluster (%d < %d)", len(founder_ids), MIN_CLUSTER_SIZE)
+        return 0
+
+    logger.info("Clustering %d startup entities (filtered from %d total)", len(founder_ids), len(all_ids))
 
     # Normalize for cosine similarity
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
