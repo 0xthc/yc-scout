@@ -602,6 +602,37 @@ def get_latest_stats(conn, founder_id):
     ).fetchone()
 
 
+def get_stats_velocity(conn, founder_id, days: int = 14) -> dict:
+    """
+    Compare the latest snapshot against the oldest snapshot within `days` ago.
+    Returns deltas for key metrics — positive = growing, negative = declining.
+    Returns empty dict if not enough history.
+    """
+    latest = conn.execute(
+        "SELECT * FROM stats_snapshots WHERE founder_id = ? ORDER BY captured_at DESC LIMIT 1",
+        (founder_id,),
+    ).fetchone()
+    if not latest:
+        return {}
+
+    older = conn.execute(
+        """SELECT * FROM stats_snapshots
+           WHERE founder_id = ?
+             AND captured_at <= datetime('now', ?)
+           ORDER BY captured_at DESC LIMIT 1""",
+        (founder_id, f"-{days} days"),
+    ).fetchone()
+    if not older:
+        return {}
+
+    return {
+        "stars_delta": (latest["github_stars"] or 0) - (older["github_stars"] or 0),
+        "commits_delta": (latest["github_commits_90d"] or 0) - (older["github_commits_90d"] or 0),
+        "karma_delta": (latest["hn_karma"] or 0) - (older["hn_karma"] or 0),
+        "days_window": days,
+    }
+
+
 def get_previous_score(conn, founder_id):
     """Get the second-most-recent score (the one before the current run)."""
     rows = conn.execute(

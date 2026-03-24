@@ -6,7 +6,7 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from backend.db import get_latest_stats, save_score
+from backend.db import get_latest_stats, get_stats_velocity, save_score
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +159,53 @@ def _score_momentum(founder_info: dict, stats: dict) -> int:
     return min(score, 25)
 
 
+def _score_velocity_bonus(velocity: dict) -> int:
+    """
+    Reward rapid growth (trajectory) independently of absolute numbers.
+    A repo going 5→50 stars in 2 weeks outranks a stagnant 500-star repo.
+    Max: 15 pts (kept modest to not override fundamentals).
+    """
+    if not velocity:
+        return 0
+
+    score = 0
+    stars_delta = velocity.get("stars_delta", 0)
+    commits_delta = velocity.get("commits_delta", 0)
+    karma_delta = velocity.get("karma_delta", 0)
+
+    # Star growth trajectory
+    if stars_delta > 500:
+        score += 15
+    elif stars_delta > 200:
+        score += 12
+    elif stars_delta > 100:
+        score += 9
+    elif stars_delta > 50:
+        score += 6
+    elif stars_delta > 20:
+        score += 4
+    elif stars_delta > 5:
+        score += 2
+
+    # Commit surge (new activity burst)
+    if commits_delta > 100:
+        score += 5
+    elif commits_delta > 50:
+        score += 3
+    elif commits_delta > 20:
+        score += 1
+
+    # HN karma growth (community momentum)
+    if karma_delta > 500:
+        score += 4
+    elif karma_delta > 100:
+        score += 2
+    elif karma_delta > 20:
+        score += 1
+
+    return min(score, 15)
+
+
 def _score_availability(founder_info: dict) -> int:
     bio = (founder_info.get("bio") or "").lower()
     score = 0
@@ -187,12 +234,15 @@ def score_founder(conn, founder_id, founder_info, signals_list):
     latest_stats = get_latest_stats(conn, founder_id)
     stats = dict(latest_stats) if latest_stats else {}
 
+    velocity = get_stats_velocity(conn, founder_id, days=14)
+
     pedigree = _score_founder_pedigree(founder_info)
     execution = _score_execution_velocity(founder_info, stats, signals_list)
     momentum = _score_momentum(founder_info, stats)
     availability = _score_availability(founder_info)
+    velocity_bonus = _score_velocity_bonus(velocity)
 
-    composite = min(pedigree + execution + momentum + availability, 100)
+    composite = min(pedigree + execution + momentum + availability + velocity_bonus, 100)
 
     founder_quality = pedigree
     execution_velocity = execution
