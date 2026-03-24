@@ -360,6 +360,14 @@ def list_founders(
             where_clauses.append("f.status = ?")
             params.append(status)
 
+        # Always surface founders that have at least one signal source OR come from
+        # a known incubator (e.g. YC W26 companies that haven't posted publicly yet)
+        if not source:
+            where_clauses.append(
+                "(EXISTS (SELECT 1 FROM founder_sources fs WHERE fs.founder_id = f.id)"
+                " OR (f.incubator IS NOT NULL AND f.incubator != ''))"
+            )
+
         where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
         if sort == "stars":

@@ -179,12 +179,7 @@ def _upsert_founder(conn, f: dict) -> int:
         founder_id = conn.execute("SELECT last_insert_rowid() as id").fetchone()["id"]
         inserted = 1
 
-    # Insert a 'yc' source row so this company surfaces in the founders API
-    conn.execute(
-        """INSERT OR IGNORE INTO founder_sources (founder_id, source, source_id, profile_url)
-           VALUES (?, 'yc', ?, ?)""",
-        (founder_id, f["incubator"], f.get("domain", "")),
-    )
+    # YC companies surface via the incubator field — no source row needed
 
     # Upsert tags
     existing_tags = {
