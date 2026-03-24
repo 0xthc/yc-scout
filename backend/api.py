@@ -429,6 +429,31 @@ def trigger_pipeline():
     return result
 
 
+@app.post("/api/pipeline/scrape-yc")
+def trigger_yc_scrape():
+    """Quickly scrape YC batch companies only (fast, no timeout risk)."""
+    from backend.scrapers.yc import scrape_yc
+    from backend.scoring import score_founder
+    from backend.db import get_db
+    with get_db() as conn:
+        added = scrape_yc(conn)
+        # Score the newly added YC founders
+        yc_founders = conn.execute(
+            """SELECT f.* FROM founders f
+               JOIN founder_sources fs ON fs.founder_id = f.id
+               WHERE fs.source = 'yc'"""
+        ).fetchall()
+        scored = 0
+        for f in yc_founders:
+            try:
+                score_founder(conn, f["id"], dict(f), [])
+                scored += 1
+            except Exception:
+                pass
+    _cache.clear()
+    return {"added": added, "scored": scored}
+
+
 @app.get("/api/themes")
 def list_themes(limit: int = 150):
     """List all detected theme clusters sorted by emergence score."""
