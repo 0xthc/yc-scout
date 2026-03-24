@@ -432,26 +432,29 @@ def trigger_pipeline():
 @app.post("/api/pipeline/scrape-yc")
 def trigger_yc_scrape():
     """Quickly scrape YC batch companies only (fast, no timeout risk)."""
+    import traceback
     from backend.scrapers.yc import scrape_yc
     from backend.scoring import score_founder
     from backend.db import get_db
-    with get_db() as conn:
-        added = scrape_yc(conn)
-        # Score the newly added YC founders
-        yc_founders = conn.execute(
-            """SELECT f.* FROM founders f
-               JOIN founder_sources fs ON fs.founder_id = f.id
-               WHERE fs.source = 'yc'"""
-        ).fetchall()
-        scored = 0
-        for f in yc_founders:
-            try:
-                score_founder(conn, f["id"], dict(f), [])
-                scored += 1
-            except Exception:
-                pass
-    _cache.clear()
-    return {"added": added, "scored": scored}
+    try:
+        with get_db() as conn:
+            added = scrape_yc(conn)
+            yc_founders = conn.execute(
+                """SELECT f.* FROM founders f
+                   JOIN founder_sources fs ON fs.founder_id = f.id
+                   WHERE fs.source = 'yc'"""
+            ).fetchall()
+            scored = 0
+            for f in yc_founders:
+                try:
+                    score_founder(conn, f["id"], dict(f), [])
+                    scored += 1
+                except Exception:
+                    pass
+        _cache.clear()
+        return {"added": added, "scored": scored, "total_yc": len(yc_founders)}
+    except Exception as e:
+        return {"error": str(e), "trace": traceback.format_exc()}
 
 
 @app.get("/api/themes")

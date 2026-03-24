@@ -443,23 +443,24 @@ def _migrate_source_check(conn):
         return
 
     try:
-        conn.executescript("""
-            BEGIN;
-            PRAGMA foreign_keys=OFF;
-
-            CREATE TABLE IF NOT EXISTS founder_sources_new (
+        conn.execute("PRAGMA foreign_keys=OFF")
+        # Clean up any stale temp tables from failed previous attempts
+        conn.execute("DROP TABLE IF EXISTS founder_sources_new")
+        conn.execute("DROP TABLE IF EXISTS signals_new")
+        conn.execute("""
+            CREATE TABLE founder_sources_new (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
                 source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers','yc')),
                 source_id   TEXT DEFAULT '',
                 profile_url TEXT DEFAULT '',
                 UNIQUE(founder_id, source)
-            );
-            INSERT OR IGNORE INTO founder_sources_new SELECT * FROM founder_sources;
-            DROP TABLE founder_sources;
-            ALTER TABLE founder_sources_new RENAME TO founder_sources;
-
-            CREATE TABLE IF NOT EXISTS signals_new (
+            )""")
+        conn.execute("INSERT OR IGNORE INTO founder_sources_new SELECT * FROM founder_sources")
+        conn.execute("DROP TABLE founder_sources")
+        conn.execute("ALTER TABLE founder_sources_new RENAME TO founder_sources")
+        conn.execute("""
+            CREATE TABLE signals_new (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 founder_id  INTEGER NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
                 source      TEXT NOT NULL CHECK(source IN ('github','hn','producthunt','indiehackers','yc')),
@@ -467,17 +468,14 @@ def _migrate_source_check(conn):
                 url         TEXT DEFAULT '',
                 strong      BOOLEAN DEFAULT 0,
                 detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            INSERT OR IGNORE INTO signals_new SELECT * FROM signals;
-            DROP TABLE signals;
-            ALTER TABLE signals_new RENAME TO signals;
-
-            PRAGMA foreign_keys=ON;
-            COMMIT;
-        """)
+            )""")
+        conn.execute("INSERT OR IGNORE INTO signals_new SELECT * FROM signals")
+        conn.execute("DROP TABLE signals")
+        conn.execute("ALTER TABLE signals_new RENAME TO signals")
+        conn.execute("PRAGMA foreign_keys=ON")
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning("Source CHECK migration failed (may already be applied): %s", e)
+        logging.getLogger(__name__).warning("Source CHECK migration failed: %s", e)
     _source_check_done = True
 
 
