@@ -462,13 +462,11 @@ def trigger_recluster():
     """Re-run clustering + scoring only (no scraping). Returns immediately, runs in background."""
     import threading
     from backend.clustering import cluster_founders
-    from backend.scoring import score_all
 
     def _run():
         try:
             with get_db() as conn:
                 n = cluster_founders(conn)
-                score_all(conn)
             _cache.clear()
             logger.info("Background recluster complete: %d themes", n)
         except Exception as e:
