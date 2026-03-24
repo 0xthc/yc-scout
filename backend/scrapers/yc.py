@@ -120,79 +120,84 @@ def _company_to_founder(company: dict) -> dict:
 def scrape_yc(conn, batches: list[str] = None) -> int:
     """
     Scrape YC companies and upsert into the founders DB.
+    Uses batched DB writes to minimise HTTP round-trips to Turso.
     Returns number of new companies added.
     """
     if batches is None:
         batches = TARGET_BATCHES
 
-    added = 0
+    # 1. Fetch all companies from YC API (pure HTTP, no DB)
+    all_founders: list[dict] = []
     for batch in batches:
         logger.info("Scraping YC batch: %s", batch)
         companies = _fetch_batch(batch)
-        logger.info("YC %s: %d total companies fetched", batch, len(companies))
-
         relevant = [c for c in companies if _is_relevant(c)]
-        logger.info("YC %s: %d relevant companies after filter", batch, len(relevant))
+        logger.info("YC %s: %d/%d relevant", batch, len(relevant), len(companies))
+        all_founders.extend(_company_to_founder(c) for c in relevant)
 
-        for company in relevant:
-            founder = _company_to_founder(company)
-            added += _upsert_founder(conn, founder)
-            time.sleep(0.05)
+    if not all_founders:
+        return 0
 
-    logger.info("YC scraper: %d new companies added", added)
-    return added
+    # 2. Fetch all existing YC names in ONE query
+    incubators = list({f["incubator"] for f in all_founders})
+    ph = ",".join("?" * len(incubators))
+    existing_rows = conn.execute(
+        f"SELECT id, name, incubator FROM founders WHERE incubator IN ({ph})",
+        incubators,
+    ).fetchall()
+    existing = {(r["name"], r["incubator"]): r["id"] for r in existing_rows}
 
+    # 3. Split into new vs existing
+    to_insert = [f for f in all_founders if (f["name"], f["incubator"]) not in existing]
+    to_update = [f for f in all_founders if (f["name"], f["incubator"]) in existing]
 
-def _upsert_founder(conn, f: dict) -> int:
-    """Insert founder if not already present (match on name + incubator). Returns 1 if inserted."""
-    existing = conn.execute(
-        "SELECT id FROM founders WHERE name = ? AND incubator = ?",
-        (f["name"], f["incubator"]),
-    ).fetchone()
-
-    if existing:
-        # Update bio/notes if blank
-        conn.execute(
-            """UPDATE founders SET
-               bio = COALESCE(NULLIF(bio,''), ?),
-               domain = COALESCE(NULLIF(domain,''), ?),
-               location = COALESCE(NULLIF(location,''), ?),
-               notes = COALESCE(NULLIF(notes,''), ?),
-               updated_at = CURRENT_TIMESTAMP
-               WHERE id = ?""",
-            (f["bio"], f["domain"], f["location"], f["notes"], existing["id"]),
-        )
-        founder_id = existing["id"]
-        inserted = 0
-    else:
-        conn.execute(
-            """INSERT INTO founders
-               (name, handle, avatar, bio, domain, company, location, stage,
-                incubator, founded, notes, status, entity_type, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,'to_contact','startup', CURRENT_TIMESTAMP)""",
+    # 4. Batch-insert new companies (chunk to stay within Turso pipeline limits)
+    CHUNK = 25
+    for i in range(0, len(to_insert), CHUNK):
+        chunk = to_insert[i:i + CHUNK]
+        queries = [
             (
-                f["name"], f["handle"], f["avatar"], f["bio"],
-                f["domain"], f["company"], f["location"],
-                f["stage"], f["incubator"], f["founded"], f["notes"],
-            ),
-        )
-        founder_id = conn.execute("SELECT last_insert_rowid() as id").fetchone()["id"]
-        inserted = 1
-
-    # YC companies surface via the incubator field — no source row needed
-
-    # Upsert tags
-    existing_tags = {
-        r["tag"]
-        for r in conn.execute(
-            "SELECT tag FROM founder_tags WHERE founder_id = ?", (founder_id,)
-        ).fetchall()
-    }
-    for tag in f.get("tags", []):
-        if tag not in existing_tags:
-            conn.execute(
-                "INSERT INTO founder_tags (founder_id, tag) VALUES (?,?)",
-                (founder_id, tag),
+                """INSERT OR IGNORE INTO founders
+                   (name, handle, avatar, bio, domain, company, location, stage,
+                    incubator, founded, notes, status, entity_type, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,'to_contact','startup',CURRENT_TIMESTAMP)""",
+                (f["name"], f["handle"], f["avatar"], f["bio"], f["domain"],
+                 f["company"], f["location"], f["stage"], f["incubator"],
+                 f["founded"], f["notes"]),
             )
+            for f in chunk
+        ]
+        conn.execute_batch(queries)
 
-    return inserted
+    # 5. Batch-update bio/domain for existing entries where blank
+    for i in range(0, len(to_update), CHUNK):
+        chunk = to_update[i:i + CHUNK]
+        queries = [
+            (
+                """UPDATE founders SET
+                   bio    = COALESCE(NULLIF(bio,''), ?),
+                   domain = COALESCE(NULLIF(domain,''), ?),
+                   notes  = COALESCE(NULLIF(notes,''), ?),
+                   updated_at = CURRENT_TIMESTAMP
+                   WHERE name = ? AND incubator = ?""",
+                (f["bio"], f["domain"], f["notes"], f["name"], f["incubator"]),
+            )
+            for f in chunk
+        ]
+        conn.execute_batch(queries)
+
+    # 6. Batch-insert tags (use subquery to resolve founder_id)
+    tag_queries = []
+    for f in all_founders:
+        for tag in f.get("tags", []):
+            tag_queries.append((
+                """INSERT OR IGNORE INTO founder_tags (founder_id, tag)
+                   SELECT id, ? FROM founders WHERE name = ? AND incubator = ? LIMIT 1""",
+                (tag, f["name"], f["incubator"]),
+            ))
+    for i in range(0, len(tag_queries), CHUNK):
+        conn.execute_batch(tag_queries[i:i + CHUNK])
+
+    added = len(to_insert)
+    logger.info("YC scraper: %d new companies added, %d updated", added, len(to_update))
+    return added
