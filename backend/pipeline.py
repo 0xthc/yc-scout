@@ -26,7 +26,17 @@ from backend.db import get_db, init_db
 from backend.embedder import embed_all_founders
 from backend.enrichment import enrich_qualified_founders
 from backend.scoring import score_founder
-from backend.scrapers import scrape_github, scrape_hn, scrape_producthunt, scrape_indiehackers, enrich_founders, scrape_yc, scrape_accelerators
+from backend.scrapers import (
+    scrape_github,
+    scrape_hn,
+    scrape_producthunt,
+    scrape_producthunt_daily,
+    scrape_indiehackers,
+    enrich_founders,
+    scrape_yc,
+    scrape_accelerators,
+    scrape_southparkcommons,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,13 +85,61 @@ def run_pipeline():
         except Exception as e:
             logger.error("YC scraper failed: %s", e)
 
-        # Other accelerators — curated seeds + HN watcher
+        # Other accelerators — curated seeds + HN watcher (2026-only filter applied inside)
         try:
             acc_added = scrape_accelerators(conn)
             founders_scraped += acc_added
             logger.info("Accelerators scraper: %d new companies added", acc_added)
         except Exception as e:
             logger.error("Accelerators scraper failed: %s", e)
+
+        # South Park Commons — Seed-stage companies (2026-only filter applied inside)
+        try:
+            spc_companies = scrape_southparkcommons()
+            spc_added = 0
+            for company in spc_companies:
+                from backend.db import upsert_founder as _upsert
+                fid = _upsert(
+                    conn,
+                    name=company["name"],
+                    handle=f"@spc-{company['name'].lower().replace(' ', '-')[:40]}",
+                    bio=company.get("description", "")[:500],
+                    stage=company.get("stage", "Seed"),
+                    incubator="South Park Commons",
+                    entity_type="startup",
+                )
+                if fid:
+                    spc_added += 1
+            founders_scraped += spc_added
+            logger.info("SPC scraper: %d companies upserted", spc_added)
+        except Exception as e:
+            logger.error("SPC scraper failed: %s", e)
+
+        # Product Hunt daily leaderboard via Jina (2026-only filter applied inside)
+        try:
+            ph_products = scrape_producthunt_daily()
+            ph_added = 0
+            for product in ph_products:
+                from backend.db import upsert_founder as _upsert, add_signal as _add_signal
+                slug = product["name"].lower().replace(" ", "-")[:40]
+                fid = _upsert(
+                    conn,
+                    name=product["name"],
+                    handle=f"@ph-daily-{slug}",
+                    bio=f"Product Hunt daily — {product['upvotes']} upvotes ({product['date']})",
+                    entity_type="startup",
+                )
+                if fid:
+                    _add_signal(
+                        conn, fid, "producthunt",
+                        label=f"{product['name']} — {product['upvotes']} upvotes",
+                        strong=product["upvotes"] >= 500,
+                    )
+                    ph_added += 1
+            founders_scraped += ph_added
+            logger.info("PH daily scraper: %d products upserted", ph_added)
+        except Exception as e:
+            logger.error("PH daily scraper failed: %s", e)
 
     # Phase 1.5: Embed founder content
     with get_db() as conn:

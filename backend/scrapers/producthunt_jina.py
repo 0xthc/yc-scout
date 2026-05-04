@@ -1,0 +1,162 @@
+"""
+Product Hunt daily leaderboard scraper — Jina reader edition.
+
+Source: https://www.producthunt.com (daily top products)
+Fetched via Jina reader: https://r.jina.ai/https://www.producthunt.com
+
+Strategy:
+  - Fetch today's PH leaderboard via Jina (no API key needed)
+  - Parse product names + upvote counts from the rendered markdown
+  - 2026-only filter: only scrape pages dated in 2026; skip any page whose
+    date resolves to a year other than 2026
+  - Only keep products with >= 150 upvotes
+  - Returns list of dicts: {name, upvotes, source, date}
+"""
+
+import logging
+import re
+from datetime import datetime, timezone
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+JINA_BASE = "https://r.jina.ai/https://www.producthunt.com"
+MIN_UPVOTES = 150
+
+# 2026-only filter: reject pages/dates outside 2026
+_TARGET_YEAR = 2026
+
+
+def _jina_url_for_date(date: str) -> str:
+    """
+    Return the Jina reader URL for a specific PH leaderboard date.
+    date format: YYYY-MM-DD  e.g. "2026-05-04"
+    PH leaderboard URL pattern: https://www.producthunt.com/leaderboard/daily/YYYY/MM/DD
+    """
+    parts = date.split("-")
+    if len(parts) != 3:
+        return JINA_BASE
+    yyyy, mm, dd = parts
+    return f"https://r.jina.ai/https://www.producthunt.com/leaderboard/daily/{yyyy}/{mm}/{dd}"
+
+
+def _fetch_markdown(url: str) -> str:
+    """Fetch a PH page via Jina reader and return the markdown text."""
+    try:
+        resp = httpx.get(
+            url,
+            headers={"User-Agent": "Precognition/1.0", "Accept": "text/markdown"},
+            timeout=30,
+            follow_redirects=True,
+        )
+        resp.raise_for_status()
+        return resp.text
+    except httpx.HTTPError as e:
+        logger.warning("PH Jina fetch failed (%s): %s", url, e)
+        return ""
+
+
+def _parse_products(markdown: str, date: str) -> list[dict]:
+    """
+    Parse product name + upvote count from Jina-rendered PH leaderboard markdown.
+
+    Jina renders PH products roughly as lines containing the product name
+    and upvote counts in one of these patterns:
+      - "### ProductName"  followed by "N upvotes" or "↑N"
+      - "**ProductName** — N upvotes"
+      - Inline: "ProductName (NNN)"
+
+    We use a multi-pattern approach and de-duplicate by name.
+    """
+    products: dict[str, int] = {}  # name → upvotes (highest wins on collision)
+
+    # Pattern 1: ### heading followed by upvote count on a nearby line
+    heading_re = re.compile(r"^#{1,4}\s+(.+)$")
+    upvote_re = re.compile(r"(\d[\d,]*)\s*(?:upvotes?|votes?|points?|↑)", re.IGNORECASE)
+    arrow_re = re.compile(r"↑\s*(\d[\d,]*)")
+
+    lines = markdown.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        m = heading_re.match(line)
+        if m:
+            name = m.group(1).strip()
+            # Look ahead up to 5 lines for an upvote count
+            for j in range(i + 1, min(i + 6, len(lines))):
+                context = lines[j].strip()
+                vm = upvote_re.search(context) or arrow_re.search(context)
+                if vm:
+                    count = int(vm.group(1).replace(",", ""))
+                    if name not in products or products[name] < count:
+                        products[name] = count
+                    break
+        i += 1
+
+    # Pattern 2: inline "Name — NNN upvotes" or "Name: NNN votes"
+    inline_re = re.compile(
+        r"\*{0,2}([A-Z][^\n*—–]{2,60}?)\*{0,2}\s*[—–:]\s*(\d[\d,]*)\s*(?:upvotes?|votes?|points?)",
+        re.IGNORECASE,
+    )
+    for m in inline_re.finditer(markdown):
+        name = m.group(1).strip()
+        count = int(m.group(2).replace(",", ""))
+        if name not in products or products[name] < count:
+            products[name] = count
+
+    # Build result list
+    results = []
+    for name, upvotes in products.items():
+        results.append({
+            "name": name,
+            "upvotes": upvotes,
+            "source": "producthunt_daily",
+            "date": date,
+        })
+    return results
+
+
+def scrape_producthunt_daily(date: str = None) -> list[dict]:
+    """
+    Scrape the Product Hunt daily leaderboard for a given date.
+
+    2026-only filter: Only dates in 2026 are accepted. If the resolved date
+    is outside 2026, an empty list is returned immediately.
+
+    Args:
+        date: ISO date string "YYYY-MM-DD". Defaults to today (UTC).
+
+    Returns:
+        List of dicts with keys: name, upvotes, source, date
+        Only entries with upvotes >= 150 are included.
+    """
+    if date is None:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # 2026-only filter: reject dates outside 2026
+    try:
+        page_year = int(date.split("-")[0])
+    except (ValueError, IndexError):
+        page_year = 0
+    if page_year != _TARGET_YEAR:
+        logger.info("PH daily: skipping date %s — 2026-only filter (year=%s)", date, page_year)
+        return []
+
+    url = _jina_url_for_date(date)
+    logger.info("PH daily: fetching leaderboard for %s via Jina", date)
+    markdown = _fetch_markdown(url)
+    if not markdown:
+        logger.warning("PH daily: empty response for %s", date)
+        return []
+
+    all_products = _parse_products(markdown, date)
+    logger.info("PH daily: parsed %d products for %s", len(all_products), date)
+
+    # Filter by minimum upvotes
+    filtered = [p for p in all_products if p["upvotes"] >= MIN_UPVOTES]
+    logger.info(
+        "PH daily: %d products with >= %d upvotes for %s",
+        len(filtered), MIN_UPVOTES, date,
+    )
+    return filtered

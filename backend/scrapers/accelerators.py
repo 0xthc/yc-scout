@@ -5,6 +5,7 @@ Layer 1: Curated seed file (seeds.json) — manually maintained batch lists
 Layer 2: HN "Launch HN" watcher — catches companies as they announce
 
 Supported: Techstars · 500 Global · Plug and Play · a16z Speedrun · HF0 · Pioneer
+          Sequoia Arc · South Park Commons · Entrepreneur First · Pear VC · Antler
 """
 
 import json
@@ -21,15 +22,24 @@ SEEDS_FILE = Path(__file__).parent / "accelerator_seeds.json"
 
 # HN search patterns per accelerator — matches against Launch HN titles
 HN_PATTERNS = {
-    "Techstars":    ["Techstars", "(Techstars)"],
-    "500 Global":   ["(500)", "500 Global", "500 Startups"],
-    "Plug and Play": ["Plug and Play", "(PnP)"],
-    "a16z Speedrun": ["Speedrun", "a16z Speedrun", "(Speedrun)"],
-    "HF0":          ["(HF0)", "HF0"],
-    "Pioneer":      ["(Pioneer)", "Pioneer.app"],
+    "Techstars":           ["Techstars", "(Techstars)"],
+    "500 Global":          ["(500)", "500 Global", "500 Startups"],
+    "Plug and Play":       ["Plug and Play", "(PnP)"],
+    "a16z Speedrun":       ["Speedrun", "a16z Speedrun", "(Speedrun)"],
+    "HF0":                 ["(HF0)", "HF0"],
+    "Pioneer":             ["(Pioneer)", "Pioneer.app"],
+    # Expanded list — 2026 cohorts
+    "Sequoia Arc":         ["Sequoia Arc", "(Arc)"],
+    "South Park Commons":  ["South Park Commons", "(SPC)"],
+    "Entrepreneur First":  ["Entrepreneur First", "(EF)"],
+    "Pear VC":             ["Pear VC", "(Pear)"],
+    "Antler":              ["Antler", "(Antler)"],
 }
 
-# How far back to look for new HN posts (seconds)
+# 2026-only filter: only accept HN posts created on or after 2026-01-01
+_YEAR_2026_TS = 1735689600  # unix timestamp for 2026-01-01T00:00:00Z
+
+# How far back to look for new HN posts (seconds) — capped by 2026 floor below
 HN_LOOKBACK = 90 * 24 * 3600  # 90 days
 
 
@@ -193,11 +203,17 @@ def scrape_accelerators(conn) -> int:
         added += _upsert_founder(conn, company)
 
     # Layer 2: HN watcher
+    # 2026-only filter: use the later of (now - HN_LOOKBACK) or 2026-01-01
+    since = max(since, _YEAR_2026_TS)
     for incubator, patterns in HN_PATTERNS.items():
         for pattern in patterns[:1]:  # one pattern per accelerator to avoid duplication
             hits = _hn_search(pattern, since_ts=since)
             logger.info("HN '%s' (%s): %d hits", pattern, incubator, len(hits))
             for hit in hits:
+                # 2026-only filter: double-check created_at_i on each hit
+                hit_ts = hit.get("created_at_i", 0) or 0
+                if hit_ts < _YEAR_2026_TS:
+                    continue
                 company = _parse_hn_hit(hit, incubator)
                 if company:
                     added += _upsert_founder(conn, company)

@@ -21,7 +21,6 @@ from backend.db import (
     add_source,
     add_tags,
     save_stats,
-    upsert_founder,
 )
 from backend.incubators import detect_incubator, detect_incubator_from_signals, format_incubator
 
@@ -188,18 +187,33 @@ def scrape_hn(conn, search_terms=None, num_days=90):
             karma = user_data.get("karma", 0)
             about = user_data.get("about", "") or ""
 
-            # Upsert founder — detect incubator from bio
+            # HN enrichment-only: skip authors not already in the DB.
+            # We do NOT insert new founders discovered via HN — HN is for
+            # enriching existing records (updating karma, scores, signals) only.
             handle = f"@{author}"
+            existing = conn.execute(
+                "SELECT id FROM founders WHERE handle = ?", (handle,)
+            ).fetchone()
+            if not existing:
+                continue  # not in DB — skip, no new inserts from HN
+            fid = existing["id"] if hasattr(existing, "__getitem__") and not isinstance(existing, tuple) else existing[0]
+
+            # Update bio/incubator on the existing record
             inc_name, inc_batch = detect_incubator(about)
             incubator_str = format_incubator(inc_name, inc_batch)
-
-            fid = upsert_founder(
-                conn,
-                name=author,
-                handle=handle,
-                bio=about[:500],
-                **({"incubator": incubator_str} if incubator_str else {}),
+            conn.execute(
+                """UPDATE founders SET
+                   bio = COALESCE(NULLIF(bio,''), ?),
+                   updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?""",
+                (about[:500], fid),
             )
+            if incubator_str:
+                conn.execute(
+                    "UPDATE founders SET incubator = ? WHERE id = ? AND (incubator IS NULL OR incubator = '')",
+                    (incubator_str, fid),
+                )
+
             add_source(
                 conn, fid, "hn",
                 source_id=author,
@@ -286,6 +300,16 @@ def scrape_hn(conn, search_terms=None, num_days=90):
             about = user_data.get("about", "") or ""
             title = hit.get("title", "")
 
+            # HN enrichment-only: skip authors not already in the DB.
+            # Phase B follows the same rule as Phase A — no new inserts from HN.
+            handle = f"@{author}"
+            existing = conn.execute(
+                "SELECT id FROM founders WHERE handle = ?", (handle,)
+            ).fetchone()
+            if not existing:
+                continue  # not in DB — skip, no new inserts from HN
+            fid = existing["id"] if hasattr(existing, "__getitem__") and not isinstance(existing, tuple) else existing[0]
+
             # Detect incubator from the post title or bio
             inc_name, inc_batch = detect_incubator(title)
             if not inc_name:
@@ -300,11 +324,20 @@ def scrape_hn(conn, search_terms=None, num_days=90):
                     inc_name = "Plug and Play"
             incubator_str = format_incubator(inc_name, inc_batch)
 
-            handle = f"@{author}"
-            fid = upsert_founder(
-                conn, name=author, handle=handle, bio=about[:500],
-                **({"incubator": incubator_str} if incubator_str else {}),
+            # Update bio/incubator on the existing record
+            conn.execute(
+                """UPDATE founders SET
+                   bio = COALESCE(NULLIF(bio,''), ?),
+                   updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?""",
+                (about[:500], fid),
             )
+            if incubator_str:
+                conn.execute(
+                    "UPDATE founders SET incubator = ? WHERE id = ? AND (incubator IS NULL OR incubator = '')",
+                    (incubator_str, fid),
+                )
+
             add_source(conn, fid, "hn", source_id=author,
                        profile_url=f"https://news.ycombinator.com/user?id={author}")
 

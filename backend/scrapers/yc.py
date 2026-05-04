@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 YC_API = "https://api.ycombinator.com/v0.1/companies"
 
 # Batches to track (most recent first)
-TARGET_BATCHES = ["W26", "S25", "W25"]
+TARGET_BATCHES = ["W26"]
 
 # Tech/AI tags we care about — filter to keep Precognition focused
 RELEVANT_TAGS = {
