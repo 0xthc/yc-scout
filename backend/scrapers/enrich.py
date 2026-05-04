@@ -37,14 +37,19 @@ def _gh_headers():
     return h
 
 
+_gh_rate_limited = False
+
 def _gh_get(path, params=None):
+    global _gh_rate_limited
+    if _gh_rate_limited:
+        raise Exception("rate limit exceeded")
     resp = httpx.get(f"{GH_API}{path}", headers=_gh_headers(), params=params, timeout=15)
     if resp.status_code == 404:
         return None
     if resp.status_code == 403 and "rate limit" in resp.text.lower():
-        logger.warning("GitHub rate limit hit during enrichment, sleeping 60s")
-        time.sleep(60)
-        resp = httpx.get(f"{GH_API}{path}", headers=_gh_headers(), params=params, timeout=15)
+        logger.warning("GitHub rate limit hit during enrichment, skipping all remaining GitHub calls this run")
+        _gh_rate_limited = True
+        raise Exception("rate limit exceeded")
     resp.raise_for_status()
     return resp.json()
 

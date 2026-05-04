@@ -61,51 +61,47 @@ def _parse_products(markdown: str, date: str) -> list[dict]:
     """
     Parse product name + upvote count from Jina-rendered PH leaderboard markdown.
 
-    Jina renders PH products roughly as lines containing the product name
-    and upvote counts in one of these patterns:
-      - "### ProductName"  followed by "N upvotes" or "↑N"
-      - "**ProductName** — N upvotes"
-      - Inline: "ProductName (NNN)"
+    Jina renders PH leaderboard like:
+      [N. ProductName](https://www.producthunt.com/products/slug)tagline
+      ![Promoted](...)
+      Categories
+      <comments_count>
+      <upvotes_count>
 
-    We use a multi-pattern approach and de-duplicate by name.
+    We extract ranked entries via the [N. Name](url) link pattern, then grab
+    the upvote count from the second standalone integer after that line.
     """
-    products: dict[str, int] = {}  # name → upvotes (highest wins on collision)
+    products: dict[str, int] = {}
 
-    # Pattern 1: ### heading followed by upvote count on a nearby line
-    heading_re = re.compile(r"^#{1,4}\s+(.+)$")
-    upvote_re = re.compile(r"(\d[\d,]*)\s*(?:upvotes?|votes?|points?|↑)", re.IGNORECASE)
-    arrow_re = re.compile(r"↑\s*(\d[\d,]*)")
-
+    # Match ranked product links: [1. Mindra](https://www.producthunt.com/products/mindra)
+    entry_re = re.compile(r'^\[(\d+)\.\s+([^\]]+)\]\(https://www\.producthunt\.com/products/[^\)]+\)')
     lines = markdown.splitlines()
+
     i = 0
     while i < len(lines):
         line = lines[i].strip()
-        m = heading_re.match(line)
+        m = entry_re.match(line)
         if m:
-            name = m.group(1).strip()
-            # Look ahead up to 5 lines for an upvote count
-            for j in range(i + 1, min(i + 6, len(lines))):
-                context = lines[j].strip()
-                vm = upvote_re.search(context) or arrow_re.search(context)
-                if vm:
-                    count = int(vm.group(1).replace(",", ""))
-                    if name not in products or products[name] < count:
-                        products[name] = count
-                    break
+            name = m.group(2).strip()
+            # Scan ahead up to 8 lines for two consecutive integer-only lines
+            # (comments count, then upvotes count)
+            int_lines = []
+            for j in range(i + 1, min(i + 9, len(lines))):
+                candidate = lines[j].strip()
+                if re.match(r'^\d+$', candidate):
+                    int_lines.append(int(candidate))
+                    if len(int_lines) == 2:
+                        break
+            if len(int_lines) >= 2:
+                upvotes = int_lines[1]  # second int = upvotes
+            elif len(int_lines) == 1:
+                upvotes = int_lines[0]
+            else:
+                upvotes = 0
+            if name not in products or products[name] < upvotes:
+                products[name] = upvotes
         i += 1
 
-    # Pattern 2: inline "Name — NNN upvotes" or "Name: NNN votes"
-    inline_re = re.compile(
-        r"\*{0,2}([A-Z][^\n*—–]{2,60}?)\*{0,2}\s*[—–:]\s*(\d[\d,]*)\s*(?:upvotes?|votes?|points?)",
-        re.IGNORECASE,
-    )
-    for m in inline_re.finditer(markdown):
-        name = m.group(1).strip()
-        count = int(m.group(2).replace(",", ""))
-        if name not in products or products[name] < count:
-            products[name] = count
-
-    # Build result list
     results = []
     for name, upvotes in products.items():
         results.append({

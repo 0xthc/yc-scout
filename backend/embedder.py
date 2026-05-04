@@ -175,26 +175,33 @@ def embed_founder(conn, founder_id: int) -> np.ndarray | None:
 def embed_all_founders(conn) -> int:
     """Embed all founders with missing or stale embeddings. Returns count embedded."""
     founders = conn.execute("SELECT id FROM founders").fetchall()
-    to_embed = []
+    if not founders:
+        return 0
 
+    # Fetch all existing embeddings in one query instead of N per-founder queries
+    existing_rows = conn.execute(
+        "SELECT founder_id, content_hash, vector FROM founder_embeddings"
+    ).fetchall()
+    existing: dict[int, tuple[str, bytes | str]] = {}
+    for row in existing_rows:
+        blob = row["vector"]
+        existing[row["founder_id"]] = (row["content_hash"], blob)
+
+    to_embed = []
     for f in founders:
         fid = f["id"]
         text = _build_founder_text(conn, fid)
         if not text.strip():
             continue
         chash = _content_hash(text)
-        existing = conn.execute(
-            "SELECT content_hash, vector FROM founder_embeddings WHERE founder_id = ?", (fid,)
-        ).fetchone()
-        if existing and existing["content_hash"] == chash:
-            # Also check dimension — old TF-IDF embeddings are wrong size, force re-embed
-            blob = existing["vector"]
-            if isinstance(blob, str):
-                import base64
-                blob = base64.b64decode(blob)
-            if len(blob) == EMBEDDING_DIM * 4:
-                continue  # correct dimension, skip
-        to_embed.append((fid, text, chash))
+        if fid in existing:
+            stored_hash, blob = existing[fid]
+            if stored_hash == chash:
+                if isinstance(blob, str):
+                    import base64
+                    blob = base64.b64decode(blob)
+                if len(blob) == EMBEDDING_DIM * 4:
+                    continue  # correct dimension and hash matches, skip
         to_embed.append((fid, text, chash))
 
     if not to_embed:

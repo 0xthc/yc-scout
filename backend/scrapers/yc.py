@@ -169,7 +169,9 @@ def scrape_yc(conn, batches: list[str] = None) -> int:
             )
             for f in chunk
         ]
-        conn.execute_batch(queries)
+        if queries:
+            sql = queries[0][0]
+            conn.executemany(sql, [q[1] for q in queries])
 
     # 5. Batch-update bio/domain for existing entries where blank
     for i in range(0, len(to_update), CHUNK):
@@ -186,7 +188,9 @@ def scrape_yc(conn, batches: list[str] = None) -> int:
             )
             for f in chunk
         ]
-        conn.execute_batch(queries)
+        if queries:
+            sql = queries[0][0]
+            conn.executemany(sql, [q[1] for q in queries])
 
     # 6. Batch-insert tags (use subquery to resolve founder_id)
     tag_queries = []
@@ -198,7 +202,7 @@ def scrape_yc(conn, batches: list[str] = None) -> int:
                 (tag, f["name"], f["incubator"]),
             ))
     for i in range(0, len(tag_queries), CHUNK):
-        conn.execute_batch(tag_queries[i:i + CHUNK])
+        [conn.execute(q[0], q[1]) for q in tag_queries[i:i + CHUNK]]
 
     added = len(to_insert)
     logger.info("YC scraper: %d new companies added, %d updated", added, len(to_update))
