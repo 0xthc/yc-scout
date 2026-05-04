@@ -54,6 +54,19 @@ def run_pipeline():
     founders_scored = 0
     alerts_sent = 0
 
+    # Phase 0: Cleanup — remove founders from batches we no longer track
+    with get_db() as conn:
+        from backend.scrapers.yc import TARGET_BATCHES
+        kept = tuple(TARGET_BATCHES)
+        placeholders = ",".join("?" * len(kept))
+        deleted = conn.execute(
+            f"DELETE FROM founders WHERE incubator LIKE 'YC%' AND incubator NOT IN ({placeholders})",
+            kept,
+        ).rowcount
+        if deleted:
+            logger.info("Phase 0: Removed %d founders from retired YC batches", deleted)
+        conn.commit()
+
     # Phase 1: Scrape
     with get_db() as conn:
         logger.info("Phase 1: Scraping sources")
