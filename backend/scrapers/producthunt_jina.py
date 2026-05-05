@@ -59,22 +59,24 @@ def _fetch_markdown(url: str) -> str:
 
 def _parse_products(markdown: str, date: str) -> list[dict]:
     """
-    Parse product name + upvote count from Jina-rendered PH leaderboard markdown.
+    Parse product name + upvote count + tagline from Jina-rendered PH leaderboard markdown.
 
     Jina renders PH leaderboard like:
-      [N. ProductName](https://www.producthunt.com/products/slug)tagline
+      [N. ProductName](https://www.producthunt.com/products/slug)tagline text here
       ![Promoted](...)
       Categories
       <comments_count>
       <upvotes_count>
 
-    We extract ranked entries via the [N. Name](url) link pattern, then grab
+    We extract ranked entries via the [N. Name](url) link pattern, grab the tagline
+    from the text immediately after the closing ')' on the same line, then grab
     the upvote count from the second standalone integer after that line.
     """
-    products: dict[str, int] = {}
+    products: dict[str, dict] = {}
 
     # Match ranked product links: [1. Mindra](https://www.producthunt.com/products/mindra)
-    entry_re = re.compile(r'^\[(\d+)\.\s+([^\]]+)\]\(https://www\.producthunt\.com/products/[^\)]+\)')
+    # Capture any trailing text on the same line as the tagline
+    entry_re = re.compile(r'^\[(\d+)\.\s+([^\]]+)\]\(https://www\.producthunt\.com/products/[^\)]+\)(.*)')
     lines = markdown.splitlines()
 
     i = 0
@@ -83,6 +85,7 @@ def _parse_products(markdown: str, date: str) -> list[dict]:
         m = entry_re.match(line)
         if m:
             name = m.group(2).strip()
+            tagline = m.group(3).strip()
             # Scan ahead up to 8 lines for two consecutive integer-only lines
             # (comments count, then upvotes count)
             int_lines = []
@@ -98,15 +101,16 @@ def _parse_products(markdown: str, date: str) -> list[dict]:
                 upvotes = int_lines[0]
             else:
                 upvotes = 0
-            if name not in products or products[name] < upvotes:
-                products[name] = upvotes
+            if name not in products or products[name]["upvotes"] < upvotes:
+                products[name] = {"upvotes": upvotes, "tagline": tagline}
         i += 1
 
     results = []
-    for name, upvotes in products.items():
+    for name, info in products.items():
         results.append({
             "name": name,
-            "upvotes": upvotes,
+            "upvotes": info["upvotes"],
+            "tagline": info["tagline"],
             "source": "producthunt_daily",
             "date": date,
         })
@@ -124,7 +128,7 @@ def scrape_producthunt_daily(date: str = None) -> list[dict]:
         date: ISO date string "YYYY-MM-DD". Defaults to today (UTC).
 
     Returns:
-        List of dicts with keys: name, upvotes, source, date
+        List of dicts with keys: name, upvotes, tagline, source, date
         Only entries with upvotes >= 150 are included.
     """
     if date is None:

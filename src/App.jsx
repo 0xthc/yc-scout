@@ -285,6 +285,33 @@ function ThemeCard({ theme, onClick }) {
   );
 }
 
+// Cluster source filter options for the Patterns tab
+const CLUSTER_FILTERS = [
+  { key: "all",          label: "All" },
+  { key: "yc",           label: "YC" },
+  { key: "accelerators", label: "Accelerators" },
+  { key: "producthunt",  label: "Product Hunt" },
+];
+
+function matchesClusterFilter(theme, filterKey) {
+  if (filterKey === "all") return true;
+  // Themes carry a `founders` array; filter by incubator of their founders
+  // Fall back to theme-level incubator field if present
+  const founders = theme.founders || [];
+  if (founders.length === 0) {
+    // If no founders attached, use theme.incubator or allow all
+    const inc = (theme.incubator || "").trim();
+    if (filterKey === "yc") return inc === "YC W26" || inc === "YC S25";
+    if (filterKey === "accelerators") return inc && !inc.startsWith("YC") && inc !== "Product Hunt";
+    if (filterKey === "producthunt") return inc === "Product Hunt";
+    return true;
+  }
+  if (filterKey === "yc") return founders.some(f => f.incubator === "YC W26" || f.incubator === "YC S25");
+  if (filterKey === "accelerators") return founders.some(f => f.incubator && !f.incubator.startsWith("YC") && f.incubator !== "Product Hunt");
+  if (filterKey === "producthunt") return founders.some(f => f.incubator === "Product Hunt");
+  return true;
+}
+
 function ThemesView() {
   const [themes, setThemes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -294,6 +321,7 @@ function ThemesView() {
   const [patternsView, setPatternsView] = useState("cards"); // "cards" | "saturation"
   const [satFilter, setSatFilter] = useState("all"); // "all" | "open" | "active" | "crowded"
   const [satSort, setSatSort] = useState("emergence"); // "emergence" | "saturation_asc" | "saturation_desc" | "builders"
+  const [clusterFilter, setClusterFilter] = useState("all"); // "all" | "yc" | "accelerators" | "producthunt"
 
   const cleanHandle = (handle = "") => handle.replace(/^@/, "");
   const truncate = (text = "", max = 50) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -473,7 +501,10 @@ function ThemesView() {
   const satLabel = (pct) => pct >= 60 ? "Crowded" : pct >= 30 ? "Active" : "Open";
   const satColor = (pct) => pct >= 60 ? C.red : pct >= 30 ? "#d97706" : C.green;
 
-  const satThemes = themes
+  // Apply cluster source filter
+  const filteredThemes = themes.filter(t => matchesClusterFilter(t, clusterFilter));
+
+  const satThemes = filteredThemes
     .map(t => ({
       ...t,
       satPct: t.builderCount ? Math.round(((t.fundedCount || 0) / t.builderCount) * 100) : 0,
@@ -506,9 +537,37 @@ function ThemesView() {
         </div>
       </div>
 
+      {/* Cluster source filter bar */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
+        {CLUSTER_FILTERS.map(f => (
+          <button
+            key={f.key}
+            onClick={() => setClusterFilter(f.key)}
+            style={{
+              padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+              cursor: "pointer",
+              border: `1px solid ${clusterFilter === f.key ? C.accent : C.border}`,
+              background: clusterFilter === f.key ? C.accent : C.surface,
+              color: clusterFilter === f.key ? "#fff" : C.textSub,
+              transition: "all 0.15s",
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+        <span style={{ alignSelf: "center", fontSize: 12, color: C.textMuted, marginLeft: 4 }}>
+          {filteredThemes.length} cluster{filteredThemes.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
       {patternsView === "cards" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
-          {themes.map(t => <ThemeCard key={t.id} theme={t} onClick={(theme) => setSelectedThemeId(theme.id)} />)}
+          {filteredThemes.map(t => <ThemeCard key={t.id} theme={t} onClick={(theme) => setSelectedThemeId(theme.id)} />)}
+          {filteredThemes.length === 0 && (
+            <div style={{ gridColumn: "1/-1", padding: "32px 0", textAlign: "center", color: C.textMuted, fontSize: 13 }}>
+              No clusters match this filter.
+            </div>
+          )}
         </div>
       )}
 

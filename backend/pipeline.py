@@ -135,13 +135,24 @@ def run_pipeline():
             for product in ph_products:
                 from backend.db import upsert_founder as _upsert, add_signal as _add_signal
                 slug = product["name"].lower().replace(" ", "-")[:40]
-                fid = _upsert(
-                    conn,
+                tagline = product.get("tagline", "")
+                bio_text = tagline if tagline else f"Product Hunt daily — {product['upvotes']} upvotes ({product['date']})"
+                handle = f"@ph-daily-{slug}"
+                upsert_kwargs = dict(
                     name=product["name"],
-                    handle=f"@ph-daily-{slug}",
-                    bio=f"Product Hunt daily — {product['upvotes']} upvotes ({product['date']})",
+                    handle=handle,
+                    bio=bio_text,
                     entity_type="startup",
                 )
+                if tagline:
+                    upsert_kwargs["notes"] = tagline
+                fid = _upsert(conn, **upsert_kwargs)
+                # Also fill bio/notes for founders that already exist with empty bio
+                if tagline:
+                    conn.execute(
+                        "UPDATE founders SET bio=?, notes=? WHERE handle=? AND (bio IS NULL OR bio='')",
+                        (tagline, tagline, handle),
+                    )
                 if fid:
                     _add_signal(
                         conn, fid, "producthunt",
