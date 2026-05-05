@@ -174,14 +174,15 @@ def run_pipeline():
         except Exception as e:
             logger.error("Embedding phase failed: %s", e)
 
-    # Phase 1.6: Cluster founders into themes
+    # Phase 1.6: Cluster founders into themes (4 independent passes)
     with get_db() as conn:
-        logger.info("Phase 1.6: Clustering founders into themes")
-        try:
-            themes = cluster_founders(conn)
-            logger.info("Upserted %d themes", themes)
-        except Exception as e:
-            logger.error("Clustering phase failed: %s", e)
+        logger.info("Phase 1.6: Clustering founders into themes (4 source groups)")
+        for sg in ['all', 'yc', 'accelerators', 'producthunt']:
+            try:
+                n = cluster_founders(conn, source_group=sg)
+                logger.info("[%s] Upserted %d themes", sg, n)
+            except Exception as e:
+                logger.error("Clustering phase failed for source_group=%s: %s", sg, e)
 
     # Phase 2: Cross-platform enrichment
     with get_db() as conn:

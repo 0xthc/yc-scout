@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS themes (
     pain_summary    TEXT DEFAULT '',
     unlock_summary  TEXT DEFAULT '',
     founder_origin  TEXT DEFAULT '',
+    source_group    TEXT DEFAULT 'all',
     first_detected  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -389,6 +390,12 @@ def _migrate_scores_columns(conn):
         conn.execute("ALTER TABLE founders ADD COLUMN notes TEXT DEFAULT ''")
     except Exception:
         pass
+
+    # source_group column on themes table
+    try:
+        conn.execute("ALTER TABLE themes ADD COLUMN source_group TEXT DEFAULT 'all'")
+    except Exception:
+        pass  # Column already exists
 
     # entity_type column — 'startup' | 'individual'
     try:

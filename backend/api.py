@@ -469,9 +469,13 @@ def trigger_recluster():
     def _run():
         try:
             with get_db() as conn:
-                n = cluster_founders(conn)
+                total = 0
+                for sg in ['all', 'yc', 'accelerators', 'producthunt']:
+                    n = cluster_founders(conn, source_group=sg)
+                    total += n
+                    logger.info("[%s] Recluster complete: %d themes", sg, n)
             _cache.clear()
-            logger.info("Background recluster complete: %d themes", n)
+            logger.info("Background recluster complete: %d themes total", total)
         except Exception as e:
             logger.error("Background recluster failed: %s", e, exc_info=True)
 
@@ -481,16 +485,17 @@ def trigger_recluster():
 
 
 @app.get("/api/themes")
-def list_themes(limit: int = 150):
+def list_themes(limit: int = 150, source: str = "all"):
     """List all detected theme clusters sorted by emergence score."""
-    cached = _cache_get(f"themes_{limit}")
+    cache_key = f"themes_{limit}_{source}"
+    cached = _cache_get(cache_key)
     if cached:
         return cached
 
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT * FROM themes ORDER BY emergence_score DESC LIMIT ?",
-            (limit,),
+            "SELECT * FROM themes WHERE source_group = ? ORDER BY emergence_score DESC LIMIT ?",
+            (source, limit),
         ).fetchall()
 
         themes = []
@@ -537,7 +542,7 @@ def list_themes(limit: int = 150):
                 ],
             })
 
-    _cache_set(f"themes_{limit}", themes)
+    _cache_set(f"themes_{limit}_{source}", themes)
     return themes
 
 

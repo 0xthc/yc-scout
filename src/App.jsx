@@ -328,12 +328,17 @@ function ThemesView() {
   const selectedThemeName = selected?.name || themes.find(t => t.id === selectedThemeId)?.name || "";
   const encodedThemeName = encodeURIComponent(selectedThemeName);
 
+  // Fetch themes whenever clusterFilter changes (server-side filtering by source_group)
   useEffect(() => {
-    fetch(`${API}/api/themes`).then(r => r.json()).then(data => {
-      setThemes(data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    fetch(`${API}/api/themes?source=${clusterFilter}`)
+      .then(r => r.json())
+      .then(data => {
+        setThemes(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [clusterFilter]);
 
   useEffect(() => {
     if (!selectedThemeId) {
@@ -501,8 +506,8 @@ function ThemesView() {
   const satLabel = (pct) => pct >= 60 ? "Crowded" : pct >= 30 ? "Active" : "Open";
   const satColor = (pct) => pct >= 60 ? C.red : pct >= 30 ? "#d97706" : C.green;
 
-  // Apply cluster source filter
-  const filteredThemes = themes.filter(t => matchesClusterFilter(t, clusterFilter));
+  // Themes are already filtered server-side by source_group (clusterFilter)
+  const filteredThemes = themes;
 
   const satThemes = filteredThemes
     .map(t => ({

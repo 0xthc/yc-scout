@@ -215,10 +215,17 @@ def _classify_founder_origin(conn, founder_ids: list[int]) -> str:
 # ── Main clustering function ─────────────────────────────────
 
 
-def cluster_founders(conn) -> int:
+def cluster_founders(conn, source_group: str = "all") -> int:
     """
-    Run HDBSCAN on all founder embeddings, detect themes, persist results.
+    Run HDBSCAN on founder embeddings for the given source_group, detect themes, persist results.
     Only clusters startup entities (entity_type='startup', incubator set, or company field filled).
+
+    source_group:
+      'all'          → all startups (default, existing behaviour)
+      'yc'           → incubator IN ('YC W26', 'YC S25')
+      'accelerators' → incubator not YC and not Product Hunt, but non-empty
+      'producthunt'  → incubator = 'Product Hunt'
+
     Returns number of themes upserted.
     """
     from backend.embedder import load_embeddings
@@ -238,21 +245,56 @@ def cluster_founders(conn) -> int:
     ).fetchall()
     startup_id_set = {r["id"] for r in startup_rows}
 
+    # Apply source_group filter
+    if source_group == "yc":
+        sg_rows = conn.execute(
+            "SELECT id FROM founders WHERE incubator IN ('YC W26', 'YC S25')"
+        ).fetchall()
+        source_id_set = {r["id"] for r in sg_rows}
+    elif source_group == "accelerators":
+        sg_rows = conn.execute(
+            """SELECT id FROM founders
+               WHERE incubator IS NOT NULL AND incubator != ''
+                 AND incubator NOT LIKE 'YC%'
+                 AND incubator != 'Product Hunt'"""
+        ).fetchall()
+        source_id_set = {r["id"] for r in sg_rows}
+    elif source_group == "producthunt":
+        sg_rows = conn.execute(
+            "SELECT id FROM founders WHERE incubator = 'Product Hunt'"
+        ).fetchall()
+        source_id_set = {r["id"] for r in sg_rows}
+    else:
+        source_id_set = None  # 'all' — no additional filter
+
+    # Combine startup filter with source_group filter
     if startup_id_set:
-        filtered = [(fid, vec) for fid, vec in zip(all_ids, all_matrix) if fid in startup_id_set]
+        if source_id_set is not None:
+            combined_set = startup_id_set & source_id_set
+        else:
+            combined_set = startup_id_set
+        filtered = [(fid, vec) for fid, vec in zip(all_ids, all_matrix) if fid in combined_set]
         if filtered:
             founder_ids = [f[0] for f in filtered]
             matrix = np.array([f[1] for f in filtered], dtype=np.float32)
         else:
-            founder_ids, matrix = all_ids, all_matrix
+            founder_ids, matrix = [], np.array([], dtype=np.float32)
     else:
-        founder_ids, matrix = all_ids, all_matrix
+        if source_id_set is not None:
+            filtered = [(fid, vec) for fid, vec in zip(all_ids, all_matrix) if fid in source_id_set]
+            if filtered:
+                founder_ids = [f[0] for f in filtered]
+                matrix = np.array([f[1] for f in filtered], dtype=np.float32)
+            else:
+                founder_ids, matrix = [], np.array([], dtype=np.float32)
+        else:
+            founder_ids, matrix = all_ids, all_matrix
 
     if len(founder_ids) < MIN_CLUSTER_SIZE:
-        logger.info("Not enough startups to cluster (%d < %d)", len(founder_ids), MIN_CLUSTER_SIZE)
+        logger.info("[%s] Not enough startups to cluster (%d < %d)", source_group, len(founder_ids), MIN_CLUSTER_SIZE)
         return 0
 
-    logger.info("Clustering %d startup entities (filtered from %d total)", len(founder_ids), len(all_ids))
+    logger.info("[%s] Clustering %d startup entities (filtered from %d total)", source_group, len(founder_ids), len(all_ids))
 
     # Normalize for cosine similarity
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
@@ -264,7 +306,7 @@ def cluster_founders(conn) -> int:
         import umap
         reducer = umap.UMAP(n_components=UMAP_DIMS, n_neighbors=UMAP_NEIGHBORS, min_dist=0.0, metric="euclidean", random_state=42)
         reduced = reducer.fit_transform(normed)
-        logger.info("UMAP: %s -> %s", normed.shape, reduced.shape)
+        logger.info("[%s] UMAP: %s -> %s", source_group, normed.shape, reduced.shape)
     except ImportError:
         logger.warning("umap-learn not installed, skipping UMAP")
         reduced = normed
@@ -292,7 +334,7 @@ def cluster_founders(conn) -> int:
             continue
         clusters.setdefault(label, []).append(fid)
 
-    logger.info("Detected %d clusters (noise: %d)", len(clusters), sum(1 for l in labels if l == -1))
+    logger.info("[%s] Detected %d clusters (noise: %d)", source_group, len(clusters), sum(1 for l in labels if l == -1))
 
     openai_client = None
     sector_map = {}
@@ -311,6 +353,19 @@ def cluster_founders(conn) -> int:
     except Exception:
         pass
 
+    # Delete existing themes for this source_group before re-inserting
+    # (first remove founder_theme links for themes in this group, then the themes themselves)
+    try:
+        existing_ids = conn.execute(
+            "SELECT id FROM themes WHERE source_group = ?", (source_group,)
+        ).fetchall()
+        for row in existing_ids:
+            conn.execute("DELETE FROM founder_themes WHERE theme_id = ?", (row["id"],))
+        conn.execute("DELETE FROM themes WHERE source_group = ?", (source_group,))
+        logger.info("[%s] Cleared %d old themes before re-clustering", source_group, len(existing_ids))
+    except Exception as e:
+        logger.warning("[%s] Could not clear old themes: %s", source_group, e)
+
     themes_upserted = 0
 
     for label, members in clusters.items():
@@ -324,32 +379,19 @@ def cluster_founders(conn) -> int:
             sector_counts[sector_map.get(fid, "Other")] += 1
         dominant_sector = max(sector_counts.items(), key=lambda kv: kv[1])[0] if sector_counts else "Other"
 
-        # Check if a theme with these members already exists
-        # Simple heuristic: match by majority member overlap
-        existing_theme_id = _find_matching_theme(conn, members)
-
-        if existing_theme_id:
-            theme_id = existing_theme_id
-            # Update
-            try:
-                conn.execute(
-                    """UPDATE themes SET name=?, builder_count=?, founder_origin=?, sector=?, updated_at=CURRENT_TIMESTAMP
-                       WHERE id=?""",
-                    (name, len(members), origin, dominant_sector, theme_id),
-                )
-            except Exception:
-                conn.execute(
-                    """UPDATE themes SET name=?, builder_count=?, founder_origin=?, updated_at=CURRENT_TIMESTAMP
-                       WHERE id=?""",
-                    (name, len(members), origin, theme_id),
-                )
-        else:
-            # Insert new theme
+        # Insert new theme with source_group
+        try:
+            cur = conn.execute(
+                """INSERT INTO themes (name, builder_count, founder_origin, sector, source_group)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (name, len(members), origin, dominant_sector, source_group),
+            )
+        except Exception:
             try:
                 cur = conn.execute(
-                    """INSERT INTO themes (name, builder_count, founder_origin, sector)
+                    """INSERT INTO themes (name, builder_count, founder_origin, source_group)
                        VALUES (?, ?, ?, ?)""",
-                    (name, len(members), origin, dominant_sector),
+                    (name, len(members), origin, source_group),
                 )
             except Exception:
                 cur = conn.execute(
@@ -357,7 +399,7 @@ def cluster_founders(conn) -> int:
                        VALUES (?, ?, ?)""",
                     (name, len(members), origin),
                 )
-            theme_id = cur.lastrowid
+        theme_id = cur.lastrowid
 
         # Compute and update emergence score
         score = _compute_emergence_score(conn, theme_id, members)
@@ -379,7 +421,7 @@ def cluster_founders(conn) -> int:
             )
 
         themes_upserted += 1
-        logger.info("Theme '%s' (id=%d): %d founders, score=%d", name, theme_id, len(members), score)
+        logger.info("[%s] Theme '%s' (id=%d): %d founders, score=%d", source_group, name, theme_id, len(members), score)
 
     # Snapshot to history
     update_theme_history(conn)
