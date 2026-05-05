@@ -6,6 +6,7 @@ Mode selection via environment:
   - Otherwise → plain local SQLite (dev mode)
 """
 
+import logging
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -13,6 +14,8 @@ from contextlib import contextmanager
 import httpx
 
 from backend.config import DB_PATH
+
+logger = logging.getLogger(__name__)
 
 TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
 TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
@@ -240,14 +243,24 @@ class _TursoConnection:
         self._headers = {"Authorization": f"Bearer {token}"}
         self._client = httpx.Client(timeout=120)
 
-    def _pipeline(self, requests):
-        resp = self._client.post(
-            self._url,
-            json={"requests": requests},
-            headers=self._headers,
-        )
-        resp.raise_for_status()
-        return resp.json()["results"]
+    def _pipeline(self, requests, _retries=3):
+        import time
+        last_exc = None
+        for attempt in range(_retries):
+            try:
+                resp = self._client.post(
+                    self._url,
+                    json={"requests": requests},
+                    headers=self._headers,
+                )
+                resp.raise_for_status()
+                return resp.json()["results"]
+            except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.NetworkError) as e:
+                last_exc = e
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning("Turso request timeout (attempt %d/%d), retrying in %ds: %s", attempt + 1, _retries, wait, e)
+                time.sleep(wait)
+        raise last_exc
 
     def execute(self, sql, params=None):
         args = [_encode_arg(p) for p in params] if params else []
