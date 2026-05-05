@@ -1,17 +1,29 @@
 """
-YC Batch Scraper — pulls companies from the public YC API.
-Supports any batch (W26, S25, W25, …).
+YC Batch Scraper — pulls companies from YC's Algolia index (full 199+) with
+fallback to the public YC API (~40 companies).
 """
 
 import logging
+import os
 import time
 import urllib.request
+import urllib.parse
 import json
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 YC_API = "https://api.ycombinator.com/v0.1/companies"
+
+ALGOLIA_APP_ID = "45BWZJ1SGC"
+ALGOLIA_URL = "https://45bwzj1sgc-dsn.algolia.net/1/indexes/*/queries"
+
+# Batch code → Algolia display name mapping
+ALGOLIA_BATCH_NAMES = {
+    "W26": "Winter 2026",
+    "S25": "Fall 2025",
+    "W25": "Spring 2025",
+}
 
 # W26 = primary signal, S25 = context only. Older batches excluded (too stale for cluster detection).
 TARGET_BATCHES = ["W26", "S25"]
@@ -26,7 +38,57 @@ RELEVANT_TAGS = {
 
 
 def _fetch_batch(batch: str) -> list[dict]:
-    """Fetch all companies for a given YC batch."""
+    """Fetch all companies for a given YC batch. Uses Algolia if key set, else public API."""
+    algolia_key = os.environ.get("YC_ALGOLIA_KEY", "")
+    if algolia_key:
+        return _algolia_fetch_batch(batch, algolia_key)
+    return _api_fetch_batch(batch)
+
+
+def _algolia_fetch_batch(batch_code: str, api_key: str) -> list[dict]:
+    """Fetch all companies via Algolia (up to 200 per page)."""
+    batch_name = ALGOLIA_BATCH_NAMES.get(batch_code, batch_code)
+    companies = []
+    page = 0
+    while True:
+        payload = json.dumps({"requests": [{
+            "indexName": "YCCompany_production",
+            "params": f"query=&facetFilters=%5B%5B%22batch%3A{urllib.parse.quote(batch_name)}%22%5D%5D&hitsPerPage=200&page={page}&attributesToRetrieve=name,one_liner,batch,website,slug,tags,industries,team_size,status,long_description,city,country,locations,regions",
+        }]}).encode()
+        req = urllib.request.Request(
+            ALGOLIA_URL, data=payload,
+            headers={
+                "x-algolia-application-id": ALGOLIA_APP_ID,
+                "x-algolia-api-key": api_key,
+                "Content-Type": "application/json",
+                "Referer": "https://www.ycombinator.com/",
+                "Origin": "https://www.ycombinator.com",
+            }
+        )
+        try:
+            r = json.loads(urllib.request.urlopen(req, timeout=15).read())
+        except Exception as e:
+            logger.error("Algolia fetch failed for %s page %d: %s", batch_name, page, e)
+            break
+        hits = r["results"][0].get("hits", [])
+        nb = r["results"][0].get("nbHits", 0)
+        # Normalize Algolia fields to match public API format
+        for h in hits:
+            h.setdefault("oneLiner", h.pop("one_liner", "") or "")
+            h.setdefault("longDescription", h.pop("long_description", "") or "")
+            h.setdefault("teamSize", h.pop("team_size", 0) or 0)
+            h.setdefault("batch", batch_code)
+        companies.extend(hits)
+        logger.info("Algolia %s page %d: %d/%d companies", batch_name, page, len(companies), nb)
+        if len(hits) < 200 or (page + 1) * 200 >= nb:
+            break
+        page += 1
+        time.sleep(0.3)
+    return companies
+
+
+def _api_fetch_batch(batch: str) -> list[dict]:
+    """Fallback: public YC API (returns ~40 companies max)."""
     companies = []
     page = 1
     while True:
@@ -37,16 +99,13 @@ def _fetch_batch(batch: str) -> list[dict]:
         except Exception as e:
             logger.warning("YC API error (batch=%s page=%d): %s", batch, page, e)
             break
-
         batch_companies = data.get("companies", [])
         companies.extend(batch_companies)
-        logger.info("YC %s page %d: %d companies", batch, page, len(batch_companies))
-
+        logger.info("YC API %s page %d: %d companies", batch, page, len(batch_companies))
         if page >= data.get("totalPages", 1) or not batch_companies:
             break
         page += 1
         time.sleep(0.3)
-
     return companies
 
 

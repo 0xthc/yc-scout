@@ -33,6 +33,7 @@ jobs:
 
           # Embeddings
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YC_ALGOLIA_KEY: ${{ secrets.YC_ALGOLIA_KEY }}
 
           # Enrichment (optional)
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
