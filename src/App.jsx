@@ -528,7 +528,7 @@ function ThemesView() {
       <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: C.text }}>Patterns</h2>
-          <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Clusters of unrelated founders independently building in the same direction</p>
+          <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>Clusters of founders independently building in the same direction</p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {["cards", "saturation"].map(v => (
