@@ -239,19 +239,33 @@ def run_pipeline():
         logger.info("Phase 3: Scoring founders")
         founders = conn.execute("SELECT * FROM founders").fetchall()
 
+        # Pre-fetch ALL signals in one query to avoid per-founder round trips
+        all_signals_rows = conn.execute(
+            "SELECT founder_id, source, label, strong FROM signals"
+        ).fetchall()
+        signals_by_founder = {}
+        for s in all_signals_rows:
+            fid_s = s["founder_id"]
+            signals_by_founder.setdefault(fid_s, []).append(dict(s))
+
+        # Pre-fetch ALL latest stats snapshots in one query
+        all_stats_rows = conn.execute(
+            """SELECT s.* FROM stats_snapshots s
+               INNER JOIN (
+                 SELECT founder_id, MAX(captured_at) as max_ts
+                 FROM stats_snapshots GROUP BY founder_id
+               ) m ON s.founder_id = m.founder_id AND s.captured_at = m.max_ts"""
+        ).fetchall()
+        stats_by_founder = {s["founder_id"]: dict(s) for s in all_stats_rows}
+
         for f in founders:
             fid = f["id"]
             founder_info = dict(f)
-
-            # Get signals for scoring
-            signals = conn.execute(
-                "SELECT source, label, strong FROM signals WHERE founder_id = ?",
-                (fid,),
-            ).fetchall()
-            signals_list = [dict(s) for s in signals]
+            signals_list = signals_by_founder.get(fid, [])
 
             try:
-                scores = score_founder(conn, fid, founder_info, signals_list)
+                prefetched_stats = stats_by_founder.get(fid, {})
+                scores = score_founder(conn, fid, founder_info, signals_list, prefetched_stats=prefetched_stats, prefetched_velocity={})
                 founders_scored += 1
             except Exception as e:
                 logger.error("Scoring failed for founder %d: %s", fid, e)

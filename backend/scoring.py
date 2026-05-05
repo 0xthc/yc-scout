@@ -224,17 +224,24 @@ def _score_availability(founder_info: dict) -> int:
     return min(score, 10)
 
 
-def score_founder(conn, founder_id, founder_info, signals_list):
+def score_founder(conn, founder_id, founder_info, signals_list, prefetched_stats=None, prefetched_velocity=None):
     """
     Compute and save all scores for a founder.
+    Pass prefetched_stats/prefetched_velocity to avoid per-founder DB round trips.
 
     Returns:
         Dict of scores including composite.
     """
-    latest_stats = get_latest_stats(conn, founder_id)
-    stats = dict(latest_stats) if latest_stats else {}
+    if prefetched_stats is not None:
+        stats = prefetched_stats
+    else:
+        latest_stats = get_latest_stats(conn, founder_id)
+        stats = dict(latest_stats) if latest_stats else {}
 
-    velocity = get_stats_velocity(conn, founder_id, days=14)
+    if prefetched_velocity is not None:
+        velocity = prefetched_velocity
+    else:
+        velocity = get_stats_velocity(conn, founder_id, days=14)
 
     pedigree = _score_founder_pedigree(founder_info)
     execution = _score_execution_velocity(founder_info, stats, signals_list)

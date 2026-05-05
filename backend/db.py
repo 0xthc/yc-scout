@@ -607,7 +607,7 @@ def save_stats(conn, founder_id, **stats):
 
 def save_score(conn, founder_id, founder_quality, execution_velocity, market_conviction, early_traction, deal_availability, composite):
     conn.execute(
-        """INSERT INTO scores (founder_id, founder_quality, execution_velocity, market_conviction, early_traction, deal_availability, composite)
+        """INSERT OR REPLACE INTO scores (founder_id, founder_quality, execution_velocity, market_conviction, early_traction, deal_availability, composite)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (founder_id, founder_quality, execution_velocity, market_conviction, early_traction, deal_availability, composite),
     )
