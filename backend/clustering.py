@@ -27,18 +27,19 @@ UMAP_DIMS = 15
 UMAP_NEIGHBORS = 15
 
 SECTORS = {
-    "AI Infrastructure": ["machine learning infrastructure", "model training", "GPU compute", "vector database", "LLM serving", "MLOps"],
-    "Consumer AI": ["AI consumer app", "personal AI assistant", "AI companion", "generative AI product", "AI creative tools"],
-    "Developer Tools": ["developer tools", "code assistant", "API platform", "SDK", "engineering productivity", "devops"],
-    "FinTech": ["fintech", "payments", "banking", "financial services", "crypto", "DeFi", "lending", "insurance"],
-    "HealthTech": ["health tech", "digital health", "medical AI", "biotech", "genomics", "mental health", "clinical"],
-    "Climate Tech": ["climate tech", "cleantech", "carbon", "renewable energy", "sustainability", "net zero"],
-    "B2B SaaS": ["B2B SaaS", "enterprise software", "workflow automation", "CRM", "productivity", "business intelligence"],
-    "Robotics & Hardware": ["robotics", "hardware", "autonomous systems", "sensors", "embedded systems", "drones"],
-    "Web3 & Crypto": ["blockchain", "crypto", "NFT", "DeFi", "smart contracts", "decentralized"],
-    "EdTech": ["education technology", "online learning", "tutoring", "skills training", "edtech"],
-    "Security": ["cybersecurity", "security", "privacy", "authentication", "zero trust", "threat detection"],
-    "Data & Analytics": ["data analytics", "business intelligence", "data pipeline", "observability", "monitoring"],
+    # Based on YC W26 batch taxonomy (extruct.ai research)
+    "AI-Native Service": ["AI agent service", "autonomous AI", "AI replaces worker", "agentic healthcare", "agentic legal", "AI staffing", "AI back office"],
+    "AI-Enhanced Software": ["AI copilot", "AI-enhanced software", "human-in-the-loop AI", "AI workflow tool", "AI productivity", "enterprise AI software"],
+    "Developer Infrastructure": ["developer tools", "agent infrastructure", "code assistant", "API platform", "SDK", "devops", "LLM serving", "inference", "MLOps", "agent observability"],
+    "AI Research": ["AI research", "foundational model", "LLM training", "RL research", "AGI", "post-training", "model evaluation", "data for AI"],
+    "FinTech": ["fintech", "payments", "banking", "financial services", "agent payments", "insurance", "lending", "crypto"],
+    "HealthTech & Biotech": ["health tech", "digital health", "medical AI", "biotech", "genomics", "drug discovery", "clinical AI"],
+    "Hardware & Robotics": ["robotics", "hardware", "autonomous drones", "wearables", "space hardware", "defence tech", "sensors", "embedded systems"],
+    "Climate & Energy": ["climate tech", "cleantech", "energy", "carbon", "renewable", "grid", "data center energy"],
+    "Consumer": ["consumer app", "consumer product", "gaming", "language learning", "personal AI", "AI companion"],
+    "Marketplace": ["marketplace", "talent marketplace", "data marketplace", "regulated exchange"],
+    "Security": ["cybersecurity", "security", "privacy", "authentication", "threat detection"],
+    "B2B SaaS": ["B2B SaaS", "enterprise software", "workflow automation", "CRM", "business intelligence"],
 }
 
 

@@ -98,12 +98,12 @@ function ScoreBar({ label, value, max = 100 }) {
   );
 }
 
-function Card({ children, style = {} }) {
+function Card({ children, style = {}, ...props }) {
   return (
     <div style={{
       background: C.surface, border: `1px solid ${C.border}`,
       borderRadius: 12, boxShadow: C.shadow, ...style
-    }}>{children}</div>
+    }} {...props}>{children}</div>
   );
 }
 
