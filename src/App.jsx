@@ -127,8 +127,8 @@ function EmptyState({ title, sub }) {
 
 // ── Nav ───────────────────────────────────────────────────────
 
-const VIEWS = ["raw", "field", "patterns", "breaks", "flow"];
-const VIEW_LABELS = { raw: "Raw", field: "Field", patterns: "Patterns", breaks: "Breaks", flow: "Flow" };
+const VIEWS = ["field", "patterns", "breaks", "flow"];
+const VIEW_LABELS = { field: "Field", patterns: "Patterns", breaks: "Breaks", flow: "Flow" };
 const VIEW_ICONS = { raw: "", field: "", patterns: "", breaks: "", flow: "" };
 
 function TopNav({ view, setView, stats }) {
