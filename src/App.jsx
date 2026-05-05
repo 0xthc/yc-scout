@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 const API = import.meta.env.VITE_API_URL || "";
-const _BUILD = "20260505-2";
+const _BUILD = "20260505-3"; const _NOOP = () => {};
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
