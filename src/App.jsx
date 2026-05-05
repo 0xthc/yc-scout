@@ -1346,11 +1346,10 @@ function FieldLegend({ total, filtered, scoutLabel }) {
           <div style={{ fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: "uppercase", fontSize: 10, letterSpacing: "0.05em" }}>Data Sources</div>
           {[
             { label: "GitHub", dot: SOURCE.github.color, desc: "Commit activity, stars, repositories, bio" },
-            { label: "Hacker News", dot: SOURCE.hn.color, desc: "Karma, top posts, Show HN launches" },
+            { label: "Hacker News", dot: SOURCE.hn.color, desc: "Karma enrichment only — updates existing founders, no new inserts" },
             { label: "Product Hunt", dot: SOURCE.producthunt.color, desc: "Launch upvotes, featured products" },
             { label: "YC API", dot: "#FF6600", desc: "W26, S25, W25 batch companies — official YC directory" },
             { label: "Accelerator seeds", dot: "#6d28d9", desc: "Curated lists: Techstars, 500 Global, PnP, HF0, a16z Speedrun, Pioneer" },
-            { label: "HN watcher", dot: "#888", desc: "Auto-detects new Launch HN posts mentioning any accelerator" },
           ].map(({ label, dot, desc }) => (
             <div key={label} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0, marginTop: 4 }} />
@@ -1386,7 +1385,7 @@ function FieldLegend({ total, filtered, scoutLabel }) {
           </div>
 
           <div style={{ marginTop: 8, color: C.textMuted, fontStyle: "italic" }}>
-            Pipeline runs hourly. YC companies seeded from public API. Other accelerators updated from curated list + HN launches.
+            Pipeline runs hourly. Sources: YC W26 + S25 · Product Hunt (150+ upvotes) · Accelerators (Sequoia Arc, SPC, EF, Pear, Antler, HF0, Techstars, 500 Global, a16z, Pioneer). HN enrichment-only.
           </div>
         </div>
       )}
