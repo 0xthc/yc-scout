@@ -21,8 +21,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-MIN_CLUSTER_SIZE = 8       # Minimum founders to form a theme (higher = fewer, tighter clusters)
-MIN_SAMPLES = 4            # HDBSCAN min_samples
+MIN_CLUSTER_SIZE = 4       # Minimum founders to form a theme (lower = more granular clusters)
+MIN_SAMPLES = 2            # HDBSCAN min_samples
 UMAP_DIMS = 15
 UMAP_NEIGHBORS = 15
 
@@ -320,7 +320,7 @@ def cluster_founders(conn, source_group: str = "all") -> int:
             min_cluster_size=MIN_CLUSTER_SIZE,
             min_samples=MIN_SAMPLES,
             metric="euclidean",   # euclidean on L2-normed = cosine
-            cluster_selection_method="eom",
+            cluster_selection_method="leaf",  # leaf = more granular clusters (better for small groups)
         )
         labels = clusterer.fit_predict(reduced)
     except Exception as e:
