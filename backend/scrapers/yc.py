@@ -20,13 +20,14 @@ ALGOLIA_URL = "https://45bwzj1sgc-dsn.algolia.net/1/indexes/*/queries"
 
 # Batch code → Algolia display name mapping
 ALGOLIA_BATCH_NAMES = {
+    "S26": "Spring 2026",
     "W26": "Winter 2026",
     "S25": "Fall 2025",
     "W25": "Spring 2025",
 }
 
-# W26 = primary signal, S25 = context only. Older batches excluded (too stale for cluster detection).
-TARGET_BATCHES = ["W26", "S25"]
+# S26/W26 = primary signal, S25 = context only. Older batches excluded.
+TARGET_BATCHES = ["S26", "W26", "S25"]
 
 # Tech/AI tags we care about — filter to keep Precognition focused
 RELEVANT_TAGS = {
