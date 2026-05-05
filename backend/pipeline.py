@@ -60,11 +60,16 @@ def run_pipeline():
         # incubator stored as "YC W26", "YC S25" etc — prefix with "YC "
         kept = tuple(f"YC {b}" for b in TARGET_BATCHES)
         placeholders = ",".join("?" * len(kept))
+        # Delete old YC batches
         conn.execute(
             f"DELETE FROM founders WHERE incubator LIKE 'YC%' AND incubator NOT IN ({placeholders})",
             kept,
         )
-        logger.info("Phase 0: Removed retired YC batch founders (kept: %s)", kept)
+        # Delete no-incubator HN noise (old scraping artifact)
+        conn.execute(
+            "DELETE FROM founders WHERE (incubator IS NULL OR incubator = '') AND (company IS NULL OR company = '')"
+        )
+        logger.info("Phase 0: Cleaned DB (kept YC batches: %s)", kept)
         conn.commit()
 
     # Phase 1: Scrape
@@ -147,7 +152,6 @@ def run_pipeline():
                 if tagline:
                     upsert_kwargs["notes"] = tagline
                 fid = _upsert(conn, **upsert_kwargs)
-                # Also fill bio/notes for founders that already exist with empty bio
                 if tagline:
                     conn.execute(
                         "UPDATE founders SET bio=?, notes=? WHERE handle=? AND (bio IS NULL OR bio='')",
@@ -164,6 +168,43 @@ def run_pipeline():
             logger.info("PH daily scraper: %d products upserted", ph_added)
         except Exception as e:
             logger.error("PH daily scraper failed: %s", e)
+
+        # PH backfill — run once if PH count in DB is low (< 50 means Turso hasn't been backfilled)
+        try:
+            ph_count = conn.execute("SELECT COUNT(*) FROM founders WHERE incubator='Product Hunt'").fetchone()[0]
+            if ph_count < 50:
+                logger.info("PH backfill: only %d PH founders, running 2026 backfill...", ph_count)
+                from datetime import date, timedelta
+                import re as _re, time as _time
+                backfill_start = date(2026, 1, 1)
+                backfill_end = date.today() - timedelta(days=1)
+                backfill_current = backfill_start
+                backfill_added = 0
+                while backfill_current <= backfill_end:
+                    ds = backfill_current.strftime("%Y-%m-%d")
+                    try:
+                        day_products = scrape_producthunt_daily(ds)
+                        for p in day_products:
+                            name = p["name"]
+                            slug = _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+                            handle = f"@ph-daily-{slug}"
+                            tagline = p.get("tagline", "")
+                            bio_text = tagline or f"Product Hunt — {p['upvotes']} upvotes ({ds})"
+                            existing = conn.execute("SELECT id FROM founders WHERE handle=?", (handle,)).fetchone()
+                            if not existing:
+                                from backend.db import upsert_founder as _uf
+                                _uf(conn, name=name, handle=handle, bio=bio_text, notes=tagline, incubator="Product Hunt", entity_type="startup")
+                                backfill_added += 1
+                            elif tagline:
+                                conn.execute("UPDATE founders SET bio=?, notes=? WHERE handle=? AND (bio IS NULL OR bio='')", (tagline, tagline, handle))
+                    except Exception:
+                        pass
+                    backfill_current += timedelta(days=1)
+                    _time.sleep(0.8)
+                conn.commit()
+                logger.info("PH backfill complete: %d products added", backfill_added)
+        except Exception as e:
+            logger.error("PH backfill failed: %s", e)
 
     # Phase 1.5: Embed founder content
     with get_db() as conn:
