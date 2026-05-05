@@ -171,7 +171,8 @@ def scrape_yc(conn, batches: list[str] = None) -> int:
         ]
         if queries:
             sql = queries[0][0]
-            conn.executemany(sql, [q[1] for q in queries])
+            for q in queries:
+                conn.execute(sql, q[1])
 
     # 5. Batch-update bio/domain for existing entries where blank
     for i in range(0, len(to_update), CHUNK):
@@ -190,7 +191,8 @@ def scrape_yc(conn, batches: list[str] = None) -> int:
         ]
         if queries:
             sql = queries[0][0]
-            conn.executemany(sql, [q[1] for q in queries])
+            for q in queries:
+                conn.execute(sql, q[1])
 
     # 6. Batch-insert tags (use subquery to resolve founder_id)
     tag_queries = []

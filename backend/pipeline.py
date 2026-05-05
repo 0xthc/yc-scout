@@ -57,7 +57,8 @@ def run_pipeline():
     # Phase 0: Cleanup — remove founders from batches we no longer track
     with get_db() as conn:
         from backend.scrapers.yc import TARGET_BATCHES
-        kept = tuple(TARGET_BATCHES)
+        # incubator stored as "YC W26", "YC S25" etc — prefix with "YC "
+        kept = tuple(f"YC {b}" for b in TARGET_BATCHES)
         placeholders = ",".join("?" * len(kept))
         conn.execute(
             f"DELETE FROM founders WHERE incubator LIKE 'YC%' AND incubator NOT IN ({placeholders})",
