@@ -511,7 +511,11 @@ def list_themes(limit: int = 150, source: str = "all"):
                 (theme_id,),
             ).fetchall()
 
-            funded_count = sum(1 for f in founders if f["incubator"] and f["incubator"].strip())
+            FUNDED_INCUBATORS = {"yc", "techstars", "500 global", "pioneer", "hf0", "a16z speedrun", "pnp"}
+            funded_count = sum(
+                1 for f in founders
+                if f["incubator"] and any(fi in f["incubator"].lower() for fi in FUNDED_INCUBATORS)
+            )
 
             themes.append({
                 "id": theme_id,
